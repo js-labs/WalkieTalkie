@@ -30,12 +30,12 @@ import org.jsl.collider.Collider;
 import org.jsl.collider.Session;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class Channel
+class Channel
 {
     private static final String LOG_TAG = "Channel";
 
@@ -46,23 +46,27 @@ public class Channel
         public ResolveListener resolveListener;
         public Connector connector;
         public Session session;
+        public String stationName;
     }
 
     private final String m_audioFormat;
+    private final String m_stationName;
     private final MainActivity m_activity;
     private final Collider m_collider;
     private final NsdManager m_nsdManager;
     private final String m_serviceType;
     private final String m_name;
+    private final SessionManager m_sessionManager;
     private final TimerQueue m_timerQueue;
     private final int m_pingInterval;
 
     private final ReentrantLock m_lock;
     private final TreeMap<String, ServiceInfo> m_serviceInfo;
-    private final HashSet<Session> m_sessions;
+    private final HashMap<Session, String> m_sessions;
     private ChannelAcceptor m_acceptor;
     private RegistrationListener m_registrationListener;
     private String m_serviceName;
+    private int m_portNumber;
     private boolean m_stop;
     private Phaser m_phaser;
 
@@ -152,7 +156,7 @@ public class Channel
                                 (serviceInfo.connector == null) &&
                                 (serviceInfo.session == null))
                             {
-                                serviceInfo.resolveListener = new ResolveListener();
+                                serviceInfo.resolveListener = new ResolveListener( serviceInfo.nsdServiceInfo.getServiceName() );
                                 m_nsdManager.resolveService( serviceInfo.nsdServiceInfo, serviceInfo.resolveListener );
                             }
                             else
@@ -165,9 +169,7 @@ public class Channel
                             Log.d( LOG_TAG, m_name + ": skip service " + entry.getKey() );
                     }
 
-                    final String [] ss = nsdServiceInfo.getServiceName().split( MainActivity.SERVICE_NAME_SEPARATOR );
-                    final String channelName = new String( Base64.decode(ss[0], 0) );
-                    m_activity.onServiceRegistered( channelName );
+                    m_activity.setStatusText( formatStatusTextLocked() );
                     return;
                 }
                 acceptor = m_acceptor;
@@ -246,7 +248,7 @@ public class Channel
 
                 m_acceptor = null;
 
-                if (noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                if (getPendingOpsLocked() == 0)
                 {
                     /* Channel is being stopped on activity pause. */
                     m_stop = false;
@@ -263,15 +265,26 @@ public class Channel
         }
     }
 
-    private boolean noPendingResolvesAndPendingConnectorsAndSessionsLocked()
+    private int getPendingOpsLocked()
     {
         /* Lock is supposed to be locked. */
         if (BuildConfig.DEBUG && !m_lock.isHeldByCurrentThread())
             throw new AssertionError();
 
+        final StringBuilder sb = new StringBuilder();
+        sb.append( m_name );
+        sb.append( ": " );
+        sb.append( "getPendingOps\n" );
+
+        int ret = 0;
+
         for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
         {
             final ServiceInfo serviceInfo = entry.getValue();
+            sb.append( "   " );
+            sb.append( serviceInfo.nsdServiceInfo.getServiceName() );
+            sb.append( ": " );
+
             if (serviceInfo.resolveListener != null)
             {
                 if (BuildConfig.DEBUG &&
@@ -280,30 +293,51 @@ public class Channel
                 {
                     throw new AssertionError();
                 }
-                return false;
+                sb.append( " resolveListener=" );
+                sb.append( serviceInfo.resolveListener );
+                ret++;
             }
             else if (serviceInfo.connector != null)
             {
                 if (BuildConfig.DEBUG && (serviceInfo.session != null))
                     throw new AssertionError();
-                return false;
+                sb.append( " connector=" );
+                sb.append( serviceInfo.connector );
+                ret++;
             }
             else if (serviceInfo.session != null)
-                return false;
+            {
+                sb.append( " session=" );
+                sb.append( serviceInfo.session.getRemoteAddress().toString() );
+                ret++;
+            }
+            sb.append( "\n" );
         }
 
-        return (m_sessions.size() == 0);
+        ret += m_sessions.size();
+        sb.append( "   ret=" );
+        sb.append( ret );
+
+        Log.i( LOG_TAG, sb.toString() );
+        return ret;
     }
 
     private class ResolveListener implements NsdManager.ResolveListener
     {
+        private final String m_serviceName;
+
+        public ResolveListener( String serviceName )
+        {
+            m_serviceName = serviceName;
+        }
+
         public void onResolveFailed( NsdServiceInfo nsdServiceInfo, int errorCode )
         {
-            Log.i( LOG_TAG, m_name + ": onResolveFailed: " + nsdServiceInfo );
+            Log.i( LOG_TAG, m_name + ": onResolveFailed: " + nsdServiceInfo + " errorCode=" + errorCode );
             m_lock.lock();
             try
             {
-                final ServiceInfo serviceInfo = m_serviceInfo.get( nsdServiceInfo.getServiceName() );
+                final ServiceInfo serviceInfo = m_serviceInfo.get( m_serviceName );
                 if (serviceInfo != null)
                 {
                     if (BuildConfig.DEBUG &&
@@ -317,9 +351,7 @@ public class Channel
                     if (m_stop)
                     {
                         serviceInfo.resolveListener = null;
-
-                        if ((m_acceptor == null) &&
-                            noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                        if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
                         {
                             m_stop = false;
                             if (m_phaser != null)
@@ -342,6 +374,8 @@ public class Channel
                     else
                         serviceInfo.resolveListener = null;
                 }
+                else
+                    Log.e( LOG_TAG, m_name + ": internal error: service info not found [" + m_serviceName + "]" );
             }
             finally
             {
@@ -355,8 +389,7 @@ public class Channel
             m_lock.lock();
             try
             {
-                final String serviceName = nsdServiceInfo.getServiceName();
-                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+                final ServiceInfo serviceInfo = m_serviceInfo.get( m_serviceName );
                 if (serviceInfo != null)
                 {
                     if (BuildConfig.DEBUG &&
@@ -371,8 +404,7 @@ public class Channel
 
                     if (m_stop)
                     {
-                        if ((m_acceptor == null) &&
-                            noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                        if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
                         {
                             m_stop = false;
                             if (m_phaser != null)
@@ -387,10 +419,12 @@ public class Channel
                     else
                     {
                         final InetSocketAddress addr = new InetSocketAddress( nsdServiceInfo.getHost(), nsdServiceInfo.getPort() );
-                        serviceInfo.connector = new ChannelConnector( addr, serviceName );
+                        serviceInfo.connector = new ChannelConnector( addr, m_serviceName );
                         m_collider.addConnector( serviceInfo.connector );
                     }
                 }
+                else
+                    Log.w( LOG_TAG, m_name + ": internal error: service info not found [" + m_serviceName + "]" );
             }
             finally
             {
@@ -409,16 +443,18 @@ public class Channel
             {
                 if (!m_stop)
                 {
-                    if (m_sessions.add(session))
+                    if (m_sessions.containsKey(session))
                     {
-                        return new HandshakeServerSession(
-                                m_audioFormat, Channel.this, session, m_timerQueue, m_pingInterval );
+                        /* should not happen */
+                        Log.e( LOG_TAG, m_name + ": internal error" );
+                        if (BuildConfig.DEBUG)
+                            throw new AssertionError();
                     }
                     else
                     {
-                        /* should not happen */
-                        if (BuildConfig.DEBUG)
-                            throw new AssertionError();
+                        m_sessions.put( session, null );
+                        return new HandshakeServerSession(
+                                m_audioFormat, m_stationName, Channel.this, session, m_sessionManager, m_timerQueue, m_pingInterval );
                     }
                 }
                 /* else channel is being stopped, just skip a new income connection. */
@@ -444,6 +480,7 @@ public class Channel
             {
                 if (!m_stop)
                 {
+                    m_portNumber = localPort;
                     final NsdServiceInfo serviceInfo = new NsdServiceInfo();
                     final int coderFlags = (Base64.NO_PADDING | Base64.NO_WRAP);
                     final String serviceName = Base64.encodeToString(m_name.getBytes(), coderFlags) + MainActivity.SERVICE_NAME_SEPARATOR;
@@ -451,7 +488,7 @@ public class Channel
                     serviceInfo.setServiceName( serviceName );
                     serviceInfo.setPort( localPort );
 
-                    Log.i( LOG_TAG, "register service: " + serviceInfo );
+                    Log.i( LOG_TAG, m_name + ": register service: " + serviceInfo );
                     final RegistrationListener registrationListener = new RegistrationListener();
                     m_nsdManager.registerService( serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener );
                     return;
@@ -462,7 +499,7 @@ public class Channel
                 m_lock.unlock();
             }
 
-            /* Appear here only if channel is being sopped. */
+            /* Appear here only if the channel is being sopped. */
 
             try
             {
@@ -530,8 +567,7 @@ public class Channel
                     if (m_stop)
                     {
                         session.closeConnection();
-                        if ((m_acceptor == null) &&
-                            noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                        if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
                         {
                             m_stop = false;
                             if (m_phaser != null)
@@ -547,7 +583,7 @@ public class Channel
                     {
                         serviceInfo.session = session;
                         return new HandshakeClientSession(
-                                Channel.this, m_audioFormat, m_serviceName, session, m_timerQueue, m_pingInterval );
+                                Channel.this, m_audioFormat, m_stationName, m_serviceName, session, m_sessionManager, m_timerQueue, m_pingInterval );
                     }
                 }
             }
@@ -585,8 +621,7 @@ public class Channel
 
                     if (m_stop)
                     {
-                        if ((m_acceptor == null) &&
-                            noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                        if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
                         {
                             m_stop = false;
                             if (m_phaser != null)
@@ -604,7 +639,7 @@ public class Channel
                          * let's try to resolve a new one.
                          */
                         serviceInfo.ver = 0;
-                        serviceInfo.resolveListener = new ResolveListener();
+                        serviceInfo.resolveListener = new ResolveListener( serviceInfo.nsdServiceInfo.getServiceName() );
                         m_nsdManager.resolveService( serviceInfo.nsdServiceInfo, serviceInfo.resolveListener );
                     }
                 }
@@ -616,26 +651,78 @@ public class Channel
         }
     }
 
+    private String formatStatusTextLocked()
+    {
+        /* Lock is supposed to be locked. */
+        if (BuildConfig.DEBUG && !m_lock.isHeldByCurrentThread())
+            throw new AssertionError();
+
+        final StringBuilder sb = new StringBuilder();
+        sb.append( m_name );
+        if (m_portNumber != 0)
+        {
+            sb.append( " : " );
+            sb.append( m_portNumber );
+        }
+        sb.append( '\n' );
+
+        /* Sessions created with connector */
+        for (HashMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
+        {
+            final ServiceInfo serviceInfo = e.getValue();
+            if (serviceInfo.session != null)
+            {
+                sb.append( e.getKey() );
+                sb.append( " : " );
+                sb.append( serviceInfo.session.getRemoteAddress() );
+                if (serviceInfo.stationName != null)
+                {
+                    sb.append( " : " );
+                    sb.append( serviceInfo.stationName );
+                }
+            }
+        }
+
+        /* Sessions created with acceptor */
+        for (HashMap.Entry<Session, String> e : m_sessions.entrySet())
+        {
+            final Session session = e.getKey();
+            final String stationName = e.getValue();
+            sb.append( session.getRemoteAddress().toString() );
+            if (stationName != null)
+            {
+                sb.append( " : " );
+                sb.append( stationName );
+            }
+        }
+
+        return sb.toString();
+    }
+
     public Channel(
             String audioFormat,
+            String stationName,
             MainActivity activity,
             Collider collider,
             NsdManager nsdManager,
             String serviceType,
             String name,
+            SessionManager sessionManager,
             TimerQueue timerQueue,
             int pingInterval )
     {
         m_audioFormat = audioFormat;
+        m_stationName = stationName;
         m_activity = activity;
         m_collider = collider;
         m_nsdManager = nsdManager;
         m_serviceType = serviceType;
         m_name = name;
+        m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
         m_serviceInfo = new TreeMap<String, ServiceInfo>();
-        m_sessions = new HashSet<Session>();
+        m_sessions = new HashMap<Session, String>();
         m_lock = new ReentrantLock();
 
         m_acceptor = new ChannelAcceptor();
@@ -686,7 +773,7 @@ public class Channel
                     if (serviceInfo.resolveListener == null)
                     {
                         serviceInfo.ver = 0;
-                        serviceInfo.resolveListener = new ResolveListener();
+                        serviceInfo.resolveListener = new ResolveListener( serviceInfo.nsdServiceInfo.getServiceName() );
                         m_nsdManager.resolveService( nsdServiceInfo, serviceInfo.resolveListener );
                     }
                     else
@@ -706,6 +793,100 @@ public class Channel
         }
     }
 
+    public void setStationName( Session session, String stationName )
+    {
+        m_lock.lock();
+        try
+        {
+            if (m_sessions.containsKey(session))
+            {
+                if (m_sessions.get(session) == null)
+                {
+                    m_sessions.put( session, stationName );
+                    m_activity.setStatusText( formatStatusTextLocked() );
+                }
+                else
+                {
+                    Log.e( LOG_TAG, "internal error: session already has a station name" );
+                    if (BuildConfig.DEBUG)
+                        throw new AssertionError();
+                }
+            }
+            else
+            {
+                Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
+                if (BuildConfig.DEBUG)
+                    throw new AssertionError();
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void setStationName( String serviceName, String stationName )
+    {
+        m_lock.lock();
+        try
+        {
+            if (m_serviceInfo.containsKey(serviceName))
+            {
+                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+                serviceInfo.stationName = stationName;
+                m_activity.setStatusText( formatStatusTextLocked() );
+            }
+            else
+            {
+                Log.e( LOG_TAG, "internal error: service [" + serviceName + "] not found." );
+                if (BuildConfig.DEBUG)
+                    throw new AssertionError();
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void removeSession( Session session )
+    {
+        m_lock.lock();
+        try
+        {
+            if (m_sessions.containsKey(session))
+            {
+                m_sessions.remove( session );
+                m_activity.setStatusText( formatStatusTextLocked() );
+
+                if (m_stop)
+                {
+                    if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
+                    {
+                        m_stop = false;
+                        if (m_phaser != null)
+                        {
+                            final int phase = m_phaser.arriveAndDeregister();
+                            if (BuildConfig.DEBUG && (phase != 0))
+                                throw new AssertionError();
+                            m_phaser = null;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
+                if (BuildConfig.DEBUG)
+                    throw new AssertionError();
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
     public void removeSession( String serviceName, Session session )
     {
         m_lock.lock();
@@ -714,25 +895,25 @@ public class Channel
             if (serviceName == null)
             {
                 /* Session created with acceptor */
-                if (!m_sessions.remove(session))
+                if (m_sessions.containsKey(session))
                 {
-                    /* strange, should not happen */
+                    m_sessions.remove( session );
+                    m_activity.setStatusText( formatStatusTextLocked() );
+                }
+                else
+                {
+                    Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
-
-                    Log.w( LOG_TAG, m_name + ": session " + session + " not registered (" +
-                        session.getRemoteAddress() + ")." );
-
-                    /* Channel state not changed, return now. */
-                    return;
                 }
             }
             else
             {
-                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+                /* session created with connector */
+                final ServiceInfo serviceInfo = m_serviceInfo.get(serviceName);
                 if (serviceInfo == null)
                 {
-                    /* strange, should not happen... */
+                    Log.e(LOG_TAG, m_name + ": internal error: service session [" + serviceName + "] not found");
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
                 }
@@ -740,14 +921,16 @@ public class Channel
                 {
                     if (BuildConfig.DEBUG && (serviceInfo.session != session))
                         throw new AssertionError();
+
                     serviceInfo.session = null;
+                    serviceInfo.stationName = null;
+                    m_activity.setStatusText( formatStatusTextLocked() );
                 }
             }
 
             if (m_stop)
             {
-                if ((m_acceptor == null) &&
-                     noPendingResolvesAndPendingConnectorsAndSessionsLocked())
+                if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
                 {
                     m_stop = false;
                     if (m_phaser != null)
@@ -846,7 +1029,7 @@ public class Channel
                                 session.closeConnection();
                         }
 
-                        for (Session session : m_sessions)
+                        for (Session session : m_sessions.keySet())
                             session.closeConnection();
                     }
                 }

@@ -38,9 +38,10 @@ public class ChannelSession implements Session.Listener
     private final Channel m_channel;
     private final String m_serviceName;
     private final Session m_session;
+    private final StreamDefragger m_streamDefragger;
+    private final SessionManager m_sessionManager;
     private final AudioPlayer m_audioPlayer;
     private final TimerQueue m_timerQueue;
-    private final StreamDefragger m_streamDefragger;
     private TimerHandler m_timerHandler;
 
     private volatile int m_totalBytesReceived;
@@ -93,7 +94,7 @@ public class ChannelSession implements Session.Listener
         switch (messageID)
         {
             case Protocol.AudioFrame.ID:
-                m_audioPlayer.write( msg );
+                m_audioPlayer.write( Protocol.AudioFrame.getAudioData(msg) );
             break;
 
             case Protocol.Ping.ID:
@@ -110,10 +111,28 @@ public class ChannelSession implements Session.Listener
         }
     }
 
+    public static StreamDefragger createStreamDefragger( final Session session )
+    {
+        return new StreamDefragger( Protocol.Message.HEADER_SIZE )
+        {
+            protected int validateHeader( ByteBuffer header )
+            {
+                if (BuildConfig.DEBUG && (header.remaining() < Protocol.Message.HEADER_SIZE))
+                    throw new AssertionError();
+                final int messageLength = Protocol.Message.getLength(header);
+                if (messageLength <= 0)
+                    return -1; /* StreamDefragger.getNext() will return StreamDefragger.INVALID_HEADER */
+                return messageLength;
+            }
+        };
+    }
+
     public ChannelSession(
             Channel channel,
             String serviceName,
             Session session,
+            StreamDefragger streamDefragger,
+            SessionManager sessionManager,
             AudioPlayer audioPlayer,
             TimerQueue timerQueue,
             int pingInterval )
@@ -121,16 +140,10 @@ public class ChannelSession implements Session.Listener
         m_channel = channel;
         m_serviceName = serviceName;
         m_session = session;
+        m_streamDefragger = streamDefragger;
+        m_sessionManager = sessionManager;
         m_audioPlayer = audioPlayer;
         m_timerQueue = timerQueue;
-
-        m_streamDefragger = new StreamDefragger( Protocol.Message.HEADER_SIZE )
-        {
-            public int validateHeader( ByteBuffer header )
-            {
-                return Protocol.Message.getLength( header );
-            }
-        };
 
         if (pingInterval > 0)
         {
@@ -138,6 +151,10 @@ public class ChannelSession implements Session.Listener
             m_timerQueue.scheduleAtFixedRate(
                     m_timerHandler, pingInterval, pingInterval, TimeUnit.SECONDS );
         }
+
+        m_sessionManager.addSession( this );
+
+        // FIXME: check for possible message in the streamDefragger
     }
 
     public void onDataReceived( RetainableByteBuffer data )
@@ -154,7 +171,7 @@ public class ChannelSession implements Session.Listener
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + "connection closed." );
+        Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
 
         if (m_timerHandler != null)
         {
@@ -171,6 +188,7 @@ public class ChannelSession implements Session.Listener
         }
 
         m_channel.removeSession( m_serviceName, m_session );
+        m_sessionManager.removeSession( this );
     }
 
     public final int closeConnection()

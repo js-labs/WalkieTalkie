@@ -23,7 +23,6 @@ import android.os.Process;
 import android.util.Log;
 import org.jsl.collider.RetainableByteBuffer;
 import org.jsl.collider.RetainableByteBufferCache;
-
 import java.util.LinkedList;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -38,6 +37,7 @@ public class AudioRecorder implements Runnable
     private final String m_audioFormat;
     private final AudioRecord m_audioRecord;
     private final int m_frameSize;
+    private final int m_bufferSize;
 
     private final AudioPlayer m_audioPlayer;
     private final LinkedList<RetainableByteBuffer> m_list;
@@ -60,12 +60,14 @@ public class AudioRecorder implements Runnable
             AudioRecord audioRecord,
             String audioFormat,
             int frameSize,
+            int bufferSize,
             boolean repeat )
     {
         m_sessionManager = sessionManager;
         m_audioRecord = audioRecord;
         m_audioFormat = audioFormat;
         m_frameSize = frameSize;
+        m_bufferSize = bufferSize;
         if (repeat)
         {
             m_audioPlayer = AudioPlayer.create( audioFormat );
@@ -77,8 +79,9 @@ public class AudioRecorder implements Runnable
             m_list = null;
         }
         m_thread = new Thread( this, LOG_TAG + " [" + audioFormat + "]" );
-        m_byteBufferCache = new RetainableByteBufferCache( /* Take a buffer large enough for 8 audio frame messages */
-            true, 8*Protocol.AudioFrame.getMessageSize(frameSize), 16 );
+        m_byteBufferCache = new RetainableByteBufferCache(
+            /* Take a buffer large enough for 4 audio frame messages */
+            true, 4*Protocol.AudioFrame.getMessageSize(frameSize), 16 );
         m_lock = new ReentrantLock();
         m_cond = m_lock.newCondition();
         m_state = IDLE;
@@ -92,9 +95,11 @@ public class AudioRecorder implements Runnable
 
     public void run()
     {
-        Log.i( LOG_TAG, "run [" + m_audioFormat + "]: frameSize=" + m_frameSize );
+        Log.i( LOG_TAG, "run [" + m_audioFormat + "]: frameSize=" + m_frameSize + " bufferSize=" + m_bufferSize );
         android.os.Process.setThreadPriority( Process.THREAD_PRIORITY_URGENT_AUDIO );
         RetainableByteBuffer byteBuffer = m_byteBufferCache.get();
+        byte [] byteBufferArray = byteBuffer.getNioByteBuffer().array();
+        int frames = 0;
         try
         {
             for (;;)
@@ -126,6 +131,8 @@ public class AudioRecorder implements Runnable
                             m_list.clear();
                             Log.i( LOG_TAG, "Replayed " + msgs + " frames." );
                         }
+
+                        Log.i( LOG_TAG, "Sent " + frames + " frames." );
                         continue;
                     }
                     else if (m_state == SHTDN)
@@ -141,36 +148,38 @@ public class AudioRecorder implements Runnable
                 {
                     byteBuffer.release();
                     byteBuffer = m_byteBufferCache.get();
+                    byteBufferArray = byteBuffer.getNioByteBuffer().array();
                     position = 0;
 
                     if (BuildConfig.DEBUG && (byteBuffer.position() != position))
                         throw new AssertionError();
                 }
 
-                byteBuffer.position( position + Protocol.AudioFrame.getDataOffs() );
+                Protocol.AudioFrame.init( byteBuffer.getNioByteBuffer(), m_frameSize );
                 if (BuildConfig.DEBUG && (byteBuffer.remaining() < m_frameSize))
                     throw new AssertionError();
 
-                final int bytesReady = m_audioRecord.read( byteBuffer.getNioByteBuffer(), m_frameSize );
+                final int bytesReady = m_audioRecord.read( byteBufferArray, byteBuffer.position(), m_frameSize );
                 if (bytesReady == m_frameSize)
                 {
+                    final int limit = position + Protocol.AudioFrame.getMessageSize( m_frameSize );
                     byteBuffer.position( position );
-                    byteBuffer.limit( position + Protocol.AudioFrame.getMessageSize(m_frameSize) );
-
+                    byteBuffer.limit( limit );
                     final RetainableByteBuffer msg = byteBuffer.slice();
                     m_sessionManager.send( msg );
+                    frames++;
 
                     if (m_list != null)
                     {
                         /* Audio player expects just an audion frame
                          * without message header.
                          */
-                        msg.position( Protocol.AudioFrame.getDataOffs() );
-                        m_list.add( msg.slice() );
+                        m_list.add( Protocol.AudioFrame.getAudioData(msg) );
                     }
 
                     msg.release();
-                    byteBuffer.position( byteBuffer.limit() );
+                    byteBuffer.limit( byteBuffer.capacity() );
+                    byteBuffer.position( limit );
                 }
                 else
                 {
@@ -269,20 +278,24 @@ public class AudioRecorder implements Runnable
             if ((minBufferSize != AudioRecord.ERROR) &&
                 (minBufferSize != AudioRecord.ERROR_BAD_VALUE))
             {
+                /* Let's read not more than 1/2 sec, to reduce the latency,
+                 * also would be nice if frameSize will be an even number.
+                 */
+                final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 2) & (Integer.MAX_VALUE - 1);
+                int bufferSize = (frameSize * 10);
+                if (bufferSize < minBufferSize)
+                    bufferSize = minBufferSize;
+
                 final AudioRecord audioRecord = new AudioRecord(
                         MediaRecorder.AudioSource.MIC,
                         sampleRate,
                         channelConfig,
                         AudioFormat.ENCODING_PCM_16BIT,
-                        minBufferSize*10 );
+                        bufferSize );
 
                 final String audioFormat = ("PCM:" + sampleRate);
 
-                /* Let's read not more than 1/2 sec, to reduce the latency,
-                 * also would be nice if frameSize will be an even number.
-                 */
-                final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 2) & (Integer.MAX_VALUE - 1);
-                return new AudioRecorder( sessionManager, audioRecord, audioFormat, frameSize, repeat );
+                return new AudioRecorder( sessionManager, audioRecord, audioFormat, frameSize, bufferSize, repeat );
             }
         }
         return null;

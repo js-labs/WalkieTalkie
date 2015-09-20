@@ -25,7 +25,7 @@ import java.util.HashSet;
 public class SessionManager
 {
     private final ReentrantLock m_lock;
-    private HashSet<ChannelSession> m_sessions;
+    private volatile HashSet<ChannelSession> m_sessions;
 
     public SessionManager()
     {
@@ -45,11 +45,25 @@ public class SessionManager
             if (BuildConfig.DEBUG && m_sessions.contains(session))
                 throw new AssertionError();
 
-            final HashSet<ChannelSession> sessions =
-                (m_sessions == null)
-                        ? new HashSet<ChannelSession>()
-                        : (HashSet<ChannelSession>) m_sessions.clone();
+            final HashSet<ChannelSession> sessions = (HashSet<ChannelSession>) m_sessions.clone();
             sessions.add( session );
+            m_sessions = sessions;
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void removeSession( ChannelSession session )
+    {
+        m_lock.lock();
+        try
+        {
+            final HashSet<ChannelSession> sessions = (HashSet<ChannelSession>) m_sessions.clone();
+            final boolean removed = sessions.remove( session );
+            if (BuildConfig.DEBUG && !removed)
+                throw new AssertionError();
             m_sessions = sessions;
         }
         finally

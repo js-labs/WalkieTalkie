@@ -19,10 +19,8 @@
 package org.jsl.wfwt;
 
 import android.util.Log;
-import org.jsl.collider.RetainableByteBuffer;
-import org.jsl.collider.Session;
-import org.jsl.collider.StreamDefragger;
-import org.jsl.collider.TimerQueue;
+import org.jsl.collider.*;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.TimeUnit;
@@ -32,12 +30,14 @@ public class HandshakeServerSession implements Session.Listener
     private static final String LOG_TAG = "HandshakeServerSession";
 
     private final String m_audioFormat;
+    private final String m_stationName;
     private final Channel m_channel;
     private final Session m_session;
+    private final StreamDefragger m_streamDefragger;
+    private final SessionManager m_sessionManager;
     private final TimerQueue m_timerQueue;
     private final int m_pingInterval;
     private TimerHandler m_timerHandler;
-    private StreamDefragger m_streamDefragger;
 
     private class TimerHandler implements Runnable
     {
@@ -54,14 +54,20 @@ public class HandshakeServerSession implements Session.Listener
     }
 
     public HandshakeServerSession(
-            String audioFormat, Channel channel, Session session, TimerQueue timerQueue, int pingInterval )
+            String audioFormat,
+            String stationName,
+            Channel channel,
+            Session session,
+            SessionManager sessionManager,
+            TimerQueue timerQueue,
+            int pingInterval )
     {
-        Log.i( LOG_TAG, channel.getName() + ": connection accepted: " +
-                    session.getLocalAddress() + " -> " + session.getRemoteAddress() );
-
         m_audioFormat = audioFormat;
+        m_stationName = stationName;
         m_channel = channel;
         m_session = session;
+        m_streamDefragger = ChannelSession.createStreamDefragger( session );
+        m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
 
@@ -71,21 +77,7 @@ public class HandshakeServerSession implements Session.Listener
             m_timerQueue.schedule( m_timerHandler, pingInterval, TimeUnit.SECONDS );
         }
 
-        m_streamDefragger = new StreamDefragger( Protocol.Message.HEADER_SIZE )
-        {
-            protected int validateHeader( ByteBuffer header )
-            {
-                if (BuildConfig.DEBUG && (header.remaining() < Protocol.Message.HEADER_SIZE))
-                    throw new AssertionError();
-                final int messageLength = Protocol.HandshakeRequest.getLength(header);
-                if (messageLength < 0)
-                {
-                    m_session.closeConnection();
-                    return -1; /* StreamDefragger.getNext() will return StreamDefragger.INVALID_HEADER */
-                }
-                return messageLength;
-            }
-        };
+        Log.i( LOG_TAG, getLogPrefix() + "connection accepted" );
     }
 
     public void onDataReceived( RetainableByteBuffer data )
@@ -122,47 +114,41 @@ public class HandshakeServerSession implements Session.Listener
             }
 
             final short messageID = Protocol.Message.getID( msg );
-            Log.d( LOG_TAG, getLogPrefix() + "received " + messageID );
-
             if (messageID == Protocol.HandshakeRequest.ID)
             {
                 final short protocolVersion = Protocol.HandshakeRequest.getProtocolVersion(msg);
                 if (protocolVersion == Protocol.VERSION)
                 {
-                    final RetainableByteBuffer msgNext = m_streamDefragger.getNext();
-                    if (msgNext == null)
+                    try
                     {
-                        try
+                        final String audioFormat = Protocol.HandshakeRequest.getAudioFormat( msg );
+                        final String stationName = Protocol.HandshakeRequest.getStationName( msg );
+                        final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat );
+                        if (audioPlayer == null)
                         {
-                            final String audioFormat = Protocol.HandshakeRequest.getAudioFormat( msg );
-                            final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat );
-                            if (audioPlayer == null)
-                            {
-                                Log.i( LOG_TAG, getLogPrefix() +
-                                        "unsupported audio format '" + audioFormat + "', closing connection." );
-                                m_session.closeConnection();
-                            }
-                            else
-                            {
-                                final ChannelSession channelSession = new ChannelSession(
-                                        m_channel, null, m_session, audioPlayer, m_timerQueue, m_pingInterval );
-                                m_session.replaceListener( channelSession );
-
-                                final ByteBuffer handshakeReply = Protocol.HandshakeReply.createOk( m_audioFormat );
-                                m_session.sendData( handshakeReply );
-                            }
-                        }
-                        catch (final CharacterCodingException ex)
-                        {
-                            Log.e( LOG_TAG, getLogPrefix() + ex.toString() );
+                            Log.i( LOG_TAG, getLogPrefix() +
+                                    "unsupported audio format '" + audioFormat + "', closing connection." );
                             m_session.closeConnection();
                         }
+                        else
+                        {
+                            Log.i( LOG_TAG, getLogPrefix() + "handshake ok" );
+
+                            /* Send reply first to be sure other side will receive
+                             * HandshakeReplyOk before anything else.
+                             */
+                            final ByteBuffer handshakeReply = Protocol.HandshakeReplyOk.create( m_audioFormat, m_stationName );
+                            m_session.sendData( handshakeReply );
+                            m_channel.setStationName( m_session, stationName );
+
+                            final ChannelSession channelSession = new ChannelSession(
+                                    m_channel, null, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval );
+                            m_session.replaceListener( channelSession );
+                        }
                     }
-                    else
+                    catch (final CharacterCodingException ex)
                     {
-                        Log.i( LOG_TAG, getLogPrefix() +
-                                "unexpected message " + Protocol.Message.getID(msgNext) +
-                                "received, close connection." );
+                        Log.e( LOG_TAG, getLogPrefix() + ex.toString() );
                         m_session.closeConnection();
                     }
                 }
@@ -175,7 +161,7 @@ public class HandshakeServerSession implements Session.Listener
                     final String statusText = "Protocol version mismatch: " + Protocol.VERSION + "-" + protocolVersion;
                     try
                     {
-                        final ByteBuffer handshakeReply = Protocol.HandshakeReply.createFail( statusText );
+                        final ByteBuffer handshakeReply = Protocol.HandshakeReplyFail.create( statusText );
                         m_session.sendData( handshakeReply );
                     }
                     catch (final CharacterCodingException ex)
@@ -196,7 +182,7 @@ public class HandshakeServerSession implements Session.Listener
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + "connection closed." );
+        Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
         if (m_timerHandler != null)
         {
             try
@@ -209,6 +195,6 @@ public class HandshakeServerSession implements Session.Listener
                 Thread.currentThread().interrupt();
             }
         }
-        m_channel.removeSession( null, m_session );
+        m_channel.removeSession( m_session );
     }
 }

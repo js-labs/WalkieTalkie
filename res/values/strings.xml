@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="about">About</string>
     <string name="app_name">Walkie Talkie</string>
-    <string name="system_error">System error</string>
-    <string name="close">Close</string>
-    <string name="nsd_not_found">NSD service not found</string>
-    <string name="network_initialization_failed">Network initialization failed</string>
-    <string name="create">Create</string>
     <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="network_initialization_failed">Network initialization failed</string>
+    <string name="nsd_not_found">NSD service not found</string>
+    <string name="set">Set</string>
+    <string name="settings">Settings</string>
+    <string name="station_name">Station name</string>
+    <string name="system_error">System error</string>
+    <string name="volume">Volume</string>
 </resources>

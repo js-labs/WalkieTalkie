@@ -23,19 +23,20 @@ import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.util.Log;
 import org.jsl.collider.RetainableByteBuffer;
+
 import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
-public abstract class AudioPlayer implements Runnable
+public abstract class AudioPlayer
 {
     private static final String LOG_TAG = "AudioPlayer";
 
     private static final AtomicReferenceFieldUpdater<Node, Node> s_nodeNextUpdater
             = AtomicReferenceFieldUpdater.newUpdater( Node.class, Node.class, "next" );
 
-    private static final AtomicReferenceFieldUpdater<AudioPlayer, Node> s_tailUpdater
-            = AtomicReferenceFieldUpdater.newUpdater( AudioPlayer.class, Node.class, "m_tail" );
+    private static final AtomicReferenceFieldUpdater<Impl, Node> s_tailUpdater
+            = AtomicReferenceFieldUpdater.newUpdater( Impl.class, Node.class, "m_tail" );
 
     private static class Node
     {
@@ -48,7 +49,100 @@ public abstract class AudioPlayer implements Runnable
         }
     }
 
-    private static class PcmImpl extends AudioPlayer
+    private static abstract class Impl extends AudioPlayer implements Runnable
+    {
+        protected final String m_audioFormat;
+        protected final Thread m_thread;
+        protected final Semaphore m_sema;
+        protected Node m_head;
+        private volatile Node m_tail;
+
+        protected Impl( String audioFormat )
+        {
+            m_audioFormat = audioFormat;
+            m_thread = new Thread( this, LOG_TAG );
+            m_sema = new Semaphore(0);
+        }
+
+        protected final Node getNext()
+        {
+            final Node head = m_head;
+            Node next = m_head.next;
+            if (next == null)
+            {
+                m_head = null;
+                if (s_tailUpdater.compareAndSet(this, head, null))
+                    return null;
+                while ((next = head.next) == null);
+            }
+            s_nodeNextUpdater.lazySet( head, null );
+            m_head = next;
+            return next;
+        }
+
+        public void write( RetainableByteBuffer audioFrame )
+        {
+            //Log.i( LOG_TAG, m_audioFormat + ": remaining=" + audioFrame.remaining() );
+            final Node node = new Node( audioFrame );
+            audioFrame.retain();
+
+            for (;;)
+            {
+                final Node tail = m_tail;
+                if (BuildConfig.DEBUG && (tail != null) && (tail.audioFrame == null))
+                {
+                    audioFrame.release();
+                    throw new AssertionError();
+                }
+
+                if (s_tailUpdater.compareAndSet(this, tail, node))
+                {
+                    if (tail == null)
+                    {
+                        m_head = node;
+                        m_sema.release();
+                    }
+                    else
+                        tail.next = node;
+                    break;
+                }
+            }
+        }
+
+        public void stopAndWait()
+        {
+            final Node node = new Node( null );
+            for (;;)
+            {
+                final Node tail = m_tail;
+                if (BuildConfig.DEBUG && (tail != null) && (tail.next == null))
+                    throw new AssertionError();
+
+                if (s_tailUpdater.compareAndSet(this, tail, node))
+                {
+                    if (tail == null)
+                    {
+                        m_head = node;
+                        m_sema.release();
+                    }
+                    else
+                        tail.next = node;
+                    break;
+                }
+            }
+
+            try
+            {
+                m_thread.join();
+            }
+            catch (final InterruptedException ex)
+            {
+                Log.e( LOG_TAG, ex.toString() );
+            }
+        }
+    }
+
+    private static class PcmImpl extends Impl
     {
         private final AudioTrack m_audioTrack;
 
@@ -59,7 +153,7 @@ public abstract class AudioPlayer implements Runnable
             final int minBufferSize = AudioTrack.getMinBufferSize(
                     sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT );
 
-            int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 8);
+            int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 10);
             if (bufferSize < minBufferSize)
                 bufferSize = minBufferSize;
 
@@ -77,134 +171,47 @@ public abstract class AudioPlayer implements Runnable
         public void run()
         {
             Log.i( LOG_TAG, "run [" + m_audioFormat + "]" );
-            for (;;)
+            loop: for (;;)
             {
-                Node node = get();
-                if (node.audioFrame == null)
+                try
+                {
+                    m_sema.acquire();
+                }
+                catch (final InterruptedException ex)
+                {
+                    Log.e( LOG_TAG, ex.toString() );
                     break;
+                }
 
                 m_audioTrack.play();
+                Node node = m_head;
                 do
                 {
+                    if (node.audioFrame == null)
+                    {
+                        m_audioTrack.stop();
+                        break loop;
+                    }
+
                     final ByteBuffer byteBuffer = node.audioFrame.getNioByteBuffer();
-                    Log.i( LOG_TAG, "byteBuffer=" + byteBuffer.hashCode() + " " + byteBuffer );
-                    //final int cc = (byteBuffer.remaining() / 2);
-                    //for (int idx=0; idx<cc; idx++)
-                    //    m_array[idx] = byteBuffer.getShort();
-                    int rc = m_audioTrack.write( byteBuffer.array(), 0, byteBuffer.remaining() );
-                    Log.i( LOG_TAG, "rc=" + rc );
+
+                    /* We expect audio frame completely fill a byte buffer. */
+                    if (BuildConfig.DEBUG && (byteBuffer.position() != 0))
+                        throw new AssertionError();
+
+                    final byte [] array = byteBuffer.array();
+                    final int arrayOffset = byteBuffer.arrayOffset();
+                    m_audioTrack.write( array, arrayOffset, byteBuffer.remaining() );
+
                     node.audioFrame.release();
                     node = getNext();
                 }
                 while (node != null);
-
                 m_audioTrack.stop();
             }
 
             m_audioTrack.release();
             Log.i( LOG_TAG, "run [" + m_audioFormat + "]: done" );
-        }
-    }
-
-    protected final String m_audioFormat;
-    protected final Thread m_thread;
-    private final Semaphore m_sema;
-    private Node m_head;
-    private volatile Node m_tail;
-
-    protected AudioPlayer( String audioFormat )
-    {
-        m_audioFormat = audioFormat;
-        m_thread = new Thread( this, LOG_TAG );
-        m_sema = new Semaphore(0);
-    }
-
-    protected final Node get()
-    {
-        try
-        {
-            m_sema.acquire();
-        }
-        catch (final InterruptedException ex)
-        {
-            Log.e( LOG_TAG, ex.toString() );
-        }
-        return m_head;
-    }
-
-    protected final Node getNext()
-    {
-        final Node head = m_head;
-        Node next = m_head.next;
-        if (next == null)
-        {
-            m_head = null;
-            if (s_tailUpdater.compareAndSet(this, head, null))
-                return null;
-            while ((next = head.next) == null);
-        }
-        s_nodeNextUpdater.lazySet( head, null );
-        m_head = next;
-        return next;
-    }
-
-    public void write( RetainableByteBuffer audioFrame )
-    {
-        final Node node = new Node( audioFrame );
-        audioFrame.retain();
-
-        for (;;)
-        {
-            final Node tail = m_tail;
-            if (BuildConfig.DEBUG && (tail != null) && (tail.audioFrame == null))
-            {
-                audioFrame.release();
-                throw new AssertionError();
-            }
-
-            if (s_tailUpdater.compareAndSet(this, tail, node))
-            {
-                if (tail == null)
-                {
-                    m_head = node;
-                    m_sema.release();
-                }
-                else
-                    tail.next = node;
-                break;
-            }
-        }
-    }
-
-    public void stopAndWait()
-    {
-        final Node node = new Node( null );
-        for (;;)
-        {
-            final Node tail = m_tail;
-            if (BuildConfig.DEBUG && (tail != null) && (tail.next == null))
-                throw new AssertionError();
-
-            if (s_tailUpdater.compareAndSet(this, tail, node))
-            {
-                if (tail == null)
-                {
-                    m_head = node;
-                    m_sema.release();
-                }
-                else
-                    tail.next = node;
-                break;
-            }
-        }
-
-        try
-        {
-            m_thread.join();
-        }
-        catch (final InterruptedException ex)
-        {
-            Log.e( LOG_TAG, ex.toString() );
         }
     }
 
@@ -228,4 +235,7 @@ public abstract class AudioPlayer implements Runnable
         }
         return null;
     }
+
+    public abstract void write( RetainableByteBuffer audioFrame );
+    public abstract void stopAndWait();
 }

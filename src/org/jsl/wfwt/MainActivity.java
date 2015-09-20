@@ -20,7 +20,11 @@ package org.jsl.wfwt;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
@@ -40,22 +44,27 @@ public class MainActivity extends Activity
     public static final String SERVICE_TYPE = "_wfwt._tcp"; /* WiFi Walkie Talkie */
     public static final String SERVICE_NAME = "Channel_00";
     public static final String SERVICE_NAME_SEPARATOR = ":";
+    public static final String KEY_STATION_NAME = "station_name";
+    public static final String KEY_VOLUME = "volume";
     private static final String LOG_TAG = "MainActivity";
 
     private static final int DISCOVERY_STATE_START = 1;
     private static final int DISCOVERY_STATE_RUN = 2;
 
-    private SessionManager m_sessionManager;
     private AudioRecorder m_audioRecorder;
+    private String m_stationName;
     private NsdManager m_nsdManager;
     private Collider m_collider;
     private Thread m_colliderThread;
-    private TimerQueue m_timerQueue;
     private int m_pingInterval;
     private Channel m_channel;
 
+    private int m_audioStream;
+    private int m_audioMaxVolume;
+    private int m_audioVolume;
+
     /* We could handle a discovery state with m_discoveryListener only
-     * (m_discoveryListener==null means the discovery is not started)
+     * (m_discoveryListener ==null means the discovery is not started)
      * but it will not allow us to handle any problems in onCreate().
      */
     private ReentrantLock m_lock;
@@ -73,6 +82,29 @@ public class MainActivity extends Activity
             else if (event.getAction() == MotionEvent.ACTION_UP)
                 m_audioRecorder.stopRecording();
             return false;
+        }
+    }
+
+    private class SettingsDialogClickListener implements DialogInterface.OnClickListener
+    {
+        private final EditText m_editTextStationName;
+        private final SeekBar m_seekBarVolume;
+
+        public SettingsDialogClickListener(
+                EditText editTextStationName,
+                SeekBar seekBarVolume )
+        {
+            m_editTextStationName = editTextStationName;
+            m_seekBarVolume = seekBarVolume;
+        }
+
+        public void onClick( DialogInterface dialog, int which )
+        {
+            m_stationName = m_editTextStationName.getText().toString();
+            final String title = getString(R.string.app_name) + " : " + m_stationName;
+            setTitle( title );
+            m_audioVolume = m_seekBarVolume.getProgress();
+            Log.i( LOG_TAG, "audioVolume=" + m_audioVolume );
         }
     }
 
@@ -115,7 +147,7 @@ public class MainActivity extends Activity
             }
         }
 
-        public void onDiscoveryStopped( String serviceType)
+        public void onDiscoveryStopped( String serviceType )
         {
             Log.i( LOG_TAG, "Discovery stopped" );
             m_lock.lock();
@@ -205,6 +237,39 @@ public class MainActivity extends Activity
         m_cond = m_lock.newCondition();
     }
 
+    public boolean onCreateOptionsMenu( Menu menu )
+    {
+        getMenuInflater().inflate( R.menu.menu, menu );
+        return true;
+    }
+
+    public boolean onOptionsItemSelected( MenuItem item )
+    {
+        switch (item.getItemId())
+        {
+            case R.id.actionSettings:
+                final LayoutInflater layoutInflater = LayoutInflater.from( this );
+                final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder( this );
+                final View dialogView = layoutInflater.inflate( R.layout.dialog_settings, null );
+                final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
+                final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
+                editText.setText( m_stationName );
+                seekBar.setMax( m_audioMaxVolume );
+                seekBar.setProgress( m_audioVolume );
+                dialogBuilder.setView( dialogView );
+                dialogBuilder.setCancelable( true );
+                dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(editText, seekBar) );
+                dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
+                final AlertDialog dialog = dialogBuilder.create();
+                dialog.show();
+            break;
+
+            case R.id.actionAbout:
+            break;
+        }
+        return super.onOptionsItemSelected( item );
+    }
+
     public void onResume()
     {
         super.onResume();
@@ -228,8 +293,33 @@ public class MainActivity extends Activity
             return;
         }
 
-        m_sessionManager = new SessionManager();
-        m_audioRecorder = AudioRecorder.create( m_sessionManager, /*repeat*/true );
+        final SessionManager sessionManager = new SessionManager();
+        m_audioRecorder = AudioRecorder.create( sessionManager, /*repeat*/false );
+
+        final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+        m_stationName = sharedPreferences.getString( KEY_STATION_NAME, "" );
+        if (!m_stationName.isEmpty())
+        {
+            final String title = getString(R.string.app_name) + " : " + m_stationName;
+            setTitle( title );
+        }
+
+        /* set maximum volume by default */
+        m_audioStream = AudioManager.STREAM_MUSIC;
+        final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+        m_audioMaxVolume = audioManager.getStreamMaxVolume( m_audioStream );
+        m_audioVolume = m_audioMaxVolume;
+        String str = sharedPreferences.getString( KEY_VOLUME, "" );
+        if (!str.isEmpty())
+        {
+            try {
+                m_audioVolume = Integer.parseInt( str );
+            }
+            catch (final NumberFormatException ex) {
+                m_audioVolume = audioManager.getStreamMaxVolume( m_audioStream );
+            }
+        }
+        audioManager.setStreamVolume( m_audioStream, m_audioVolume, 0 );
 
         m_nsdManager = (NsdManager) getSystemService( NSD_SERVICE );
         if (m_nsdManager == null)
@@ -244,8 +334,8 @@ public class MainActivity extends Activity
             return;
         }
 
-        m_timerQueue = new TimerQueue( m_collider.getThreadPool() );
-        m_pingInterval = 5;
+        final TimerQueue timerQueue = new TimerQueue( m_collider.getThreadPool() );
+        m_pingInterval = 0; //5;
         m_colliderThread = new ColliderThread();
         m_colliderThread.start();
 
@@ -258,12 +348,14 @@ public class MainActivity extends Activity
 
         m_channel = new Channel(
                 m_audioRecorder.getAudioFormat(),
+                m_stationName,
                 this,
                 m_collider,
                 m_nsdManager,
                 SERVICE_TYPE,
                 SERVICE_NAME,
-                m_timerQueue,
+                sessionManager,
+                timerQueue,
                 m_pingInterval );
 
         m_stop = false;
@@ -276,6 +368,32 @@ public class MainActivity extends Activity
     {
         super.onPause();
         Log.i( LOG_TAG, "onPause" );
+
+        /*** persist settings ***/
+
+        final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+        final SharedPreferences.Editor editor = sharedPreferences.edit();
+        int updates = 0;
+
+        String str = sharedPreferences.getString( KEY_STATION_NAME, "" );
+        if (m_stationName.compareTo(str) != 0)
+        {
+            editor.putString( KEY_STATION_NAME, m_stationName );
+            updates++;
+        }
+
+        str = sharedPreferences.getString( KEY_VOLUME, "" );
+        final String strVolume = Integer.toString( m_audioVolume );
+        if (str.compareTo(strVolume) != 0)
+        {
+            editor.putString( KEY_VOLUME, strVolume );
+            updates++;
+        }
+
+        if (updates > 0)
+            editor.apply();
+
+        /*** stop discovery ***/
 
         boolean stopDiscovery = false;
         m_lock.lock();
@@ -364,17 +482,16 @@ public class MainActivity extends Activity
             m_audioRecorder = null;
         }
 
-        Log.i( LOG_TAG, "onPause: done." );
+        Log.i( LOG_TAG, "onPause: done" );
     }
 
-    public void onServiceRegistered( final String channelName )
+    public void setStatusText( final String text )
     {
         runOnUiThread( new Runnable() {
             public void run()
             {
                 final TextView textView = (TextView) findViewById( R.id.textChannelState );
-                textView.setText( channelName );
-                textView.setTextColor( Color.GREEN );
+                textView.setText( text );
             }
         });
     }

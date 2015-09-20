@@ -9,7 +9,7 @@
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceMedium"
             android:id="@+id/textChannelState" android:layout_gravity="center_horizontal" android:singleLine="true"
-            android:padding="5dp"/>
+            android:padding="5dp" android:inputType="textMultiLine"/>
     <Button
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"

@@ -35,6 +35,7 @@ public class HandshakeClientSession implements Session.Listener
     private final Channel m_channel;
     private final String m_serviceName;
     private final Session m_session;
+    private final SessionManager m_sessionManager;
     private final StreamDefragger m_streamDefragger;
     private final TimerQueue m_timerQueue;
     private final int m_pingInterval;
@@ -57,21 +58,18 @@ public class HandshakeClientSession implements Session.Listener
     public HandshakeClientSession(
             Channel channel,
             String audioFormat,
+            String stationName,
             String serviceName,
             Session session,
+            SessionManager sessionManager,
             TimerQueue timerQueue,
             int pingInterval )
     {
         m_channel = channel;
         m_serviceName = serviceName;
         m_session = session;
-        m_streamDefragger = new StreamDefragger( Protocol.Message.HEADER_SIZE )
-        {
-            protected int validateHeader( ByteBuffer header )
-            {
-                return Protocol.Message.getLength(header);
-            }
-        };
+        m_streamDefragger = ChannelSession.createStreamDefragger( session );
+        m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
 
@@ -84,7 +82,7 @@ public class HandshakeClientSession implements Session.Listener
 
         try
         {
-            final ByteBuffer handshakeRequest = Protocol.HandshakeRequest.create( audioFormat );
+            final ByteBuffer handshakeRequest = Protocol.HandshakeRequest.create( audioFormat, stationName );
             session.sendData( handshakeRequest );
         }
         catch (final CharacterCodingException ex)
@@ -125,54 +123,50 @@ public class HandshakeClientSession implements Session.Listener
         else
         {
             final int messageID = Protocol.Message.getID( msg );
-            if (messageID == Protocol.HandshakeReply.ID)
+            if (messageID == Protocol.HandshakeReplyOk.ID)
             {
-                final int status = Protocol.HandshakeReply.getStatus( msg );
-                if (status == Protocol.StatusOk)
+                try
                 {
-                    try
+                    final String audioFormat = Protocol.HandshakeReplyOk.getAudioFormat( msg );
+                    final String stationName = Protocol.HandshakeReplyOk.getStationName( msg );
+                    final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat );
+                    if (audioPlayer == null)
                     {
-                        final String audioFormat = Protocol.HandshakeReply.getString( msg );
-                        final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat );
-                        if (audioPlayer == null)
-                        {
-                            Log.w( LOG_TAG,
-                                    getLogPrefix() + ": unsupported audio format '" + audioFormat +
-                                    "', closing connection." );
-                            m_session.closeConnection();
-                        }
-                        else
-                        {
-                            final ChannelSession channelSession = new ChannelSession(
-                                    m_channel, m_serviceName, m_session, audioPlayer, m_timerQueue, m_pingInterval );
-                            m_session.replaceListener(channelSession);
-                        }
-                    }
-                    catch (final CharacterCodingException ex)
-                    {
-                        Log.w( LOG_TAG, getLogPrefix() + ": " + ex.toString() + ", close connection." );
+                        Log.w( LOG_TAG, getLogPrefix() +
+                                "unsupported audio format [" + audioFormat + "], closing connection" );
                         m_session.closeConnection();
                     }
+                    else
+                    {
+                        Log.i( LOG_TAG, getLogPrefix() +
+                                "HandshakeReplyOk: audioFormat[" + audioFormat + "] stationName[" + stationName + "]" );
+
+                        m_channel.setStationName( m_serviceName, stationName );
+
+                        final ChannelSession channelSession = new ChannelSession(
+                                m_channel, m_serviceName, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval);
+                        m_session.replaceListener( channelSession );
+                    }
                 }
-                else if (status == Protocol.StatusFail)
+                catch (final CharacterCodingException ex)
                 {
-                    String statusText = null;
-                    try
-                    {
-                        statusText = Protocol.HandshakeReply.getString( msg );
-                    }
-                    catch (final CharacterCodingException ex)
-                    {
-                        Log.w( LOG_TAG, getLogPrefix() + ex.toString() );
-                    }
-                    Log.i( LOG_TAG, getLogPrefix() + "HandshakeRequest rejected: " + statusText + ", close connection." );
+                    Log.w( LOG_TAG, getLogPrefix() + ": " + ex.toString() + ", close connection" );
                     m_session.closeConnection();
                 }
-                else
+            }
+            else if (messageID == Protocol.HandshakeReplyFail.ID)
+            {
+                String statusText = null;
+                try
                 {
-                    Log.i( LOG_TAG, getLogPrefix() + "invalid message received, close connection." );
-                    m_session.closeConnection();
+                    statusText = Protocol.HandshakeReplyFail.getStatusText( msg );
                 }
+                catch (final CharacterCodingException ex)
+                {
+                    Log.w( LOG_TAG, getLogPrefix() + ex.toString() );
+                }
+                Log.i( LOG_TAG, getLogPrefix() + "HandshakeRequest rejected: " + statusText + ", close connection." );
+                m_session.closeConnection();
             }
             else
             {
@@ -186,7 +180,21 @@ public class HandshakeClientSession implements Session.Listener
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + ": connection closed." );
+        Log.i( LOG_TAG, getLogPrefix() + ": connection closed" );
+
+        if (m_timerHandler != null)
+        {
+            try
+            {
+                m_timerQueue.cancel( m_timerHandler );
+            }
+            catch (final InterruptedException ex)
+            {
+                Log.w( LOG_TAG, ex.toString() );
+                Thread.currentThread().interrupt();
+            }
+        }
+
         m_channel.removeSession( m_serviceName, m_session );
     }
 }

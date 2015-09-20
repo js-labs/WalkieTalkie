@@ -19,38 +19,43 @@
 package org.jsl.wfwt;
 
 import org.jsl.collider.RetainableByteBuffer;
-
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
+import java.security.InvalidParameterException;
 
 public class Protocol
 {
-    private static final short MSG_HANDSHAKE_REQUEST = 0x0001;
-    private static final short MSG_HANDSHAKE_REPLY   = 0x0002;
-    private static final short MSG_AUDIO_FRAME       = 0x0003;
-    private static final short MSG_PING              = 0x0004;
-    private static final short MSG_PONG              = 0x0005;
+    private static final short MSG_HANDSHAKE_REQUEST    = 0x0001;
+    private static final short MSG_HANDSHAKE_REPLY_OK   = 0x0002;
+    private static final short MSG_HANDSHAKE_REPLY_FAIL = 0x0003;
+    private static final short MSG_AUDIO_FRAME          = 0x0003;
+    private static final short MSG_PING                 = 0x0004;
+    private static final short MSG_PONG                 = 0x0005;
 
     public static final byte VERSION = 1;
-
-    public static final short StatusOk = 0;
-    public static final short StatusFail = 1;
 
     public static class Message
     {
         /* message size (short, 2 bytes) + message type (short, 2 bytes) */
         public static final short HEADER_SIZE = (2 + 2);
 
-        public static ByteBuffer create( short type, short extSize )
+        public static ByteBuffer init( ByteBuffer byteBuffer, short size, short type )
         {
-            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect( HEADER_SIZE + extSize );
-            byteBuffer.putShort( (short)(HEADER_SIZE + extSize) );
+            byteBuffer.putShort( size );
             byteBuffer.putShort( type );
             return byteBuffer;
+        }
+
+        public static ByteBuffer create( short type, short extSize )
+        {
+            if ((HEADER_SIZE + extSize) > Short.MAX_VALUE)
+                throw new InvalidParameterException();
+            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect( HEADER_SIZE + extSize );
+            return init( byteBuffer, (short) (HEADER_SIZE + extSize), type );
         }
 
         public static int getLength( ByteBuffer msg )
@@ -66,33 +71,27 @@ public class Protocol
 
     public static class HandshakeRequest extends Message
     {
+        /* short : protocol version
+         * short : audio format length
+         * str   : audio format
+         * short : station name length
+         * short : station name
+         */
         public static final short ID = MSG_HANDSHAKE_REQUEST;
 
-        public static ByteBuffer create( String audioFormat ) throws CharacterCodingException
+        public static ByteBuffer create( String audioFormat, String stationName ) throws CharacterCodingException
         {
             final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
-            final ByteBuffer bb = encoder.encode( CharBuffer.wrap(audioFormat) );
-            final ByteBuffer msg = create( ID, (short) (2 + 2 + bb.remaining()) );
+            final ByteBuffer audioFormatBB = encoder.encode(CharBuffer.wrap(audioFormat));
+            final ByteBuffer stationNameBB = encoder.encode( CharBuffer.wrap(stationName) );
+            final ByteBuffer msg = create( ID, (short) (2 + 2 + audioFormatBB.remaining() + 2 + stationNameBB.remaining()) );
             msg.putShort( VERSION );
-            msg.putShort( (short) bb.remaining() );
-            msg.put( bb );
+            msg.putShort( (short) audioFormatBB.remaining() );
+            msg.put( audioFormatBB );
+            msg.putShort( (short) stationNameBB.remaining() );
+            msg.put( stationNameBB );
             msg.rewind();
             return msg;
-        }
-
-        public static int getLength( ByteBuffer msg )
-        {
-            /* It would be better to validate the whole message. */
-            final int remaining = msg.remaining();
-            final int messageLength = Message.getLength(msg);
-            if (remaining > (HEADER_SIZE + 2 + 2))
-            {
-                final int pos = msg.position();
-                final short audioFormatLength = msg.getShort( pos + HEADER_SIZE + 2 );
-                if (messageLength != (HEADER_SIZE + 4 + audioFormatLength))
-                    return -1;
-            }
-            return messageLength;
         }
 
         public static short getProtocolVersion( RetainableByteBuffer msg )
@@ -104,13 +103,39 @@ public class Protocol
         {
             String ret = null;
             final int pos = msg.position();
+            final int limit = msg.limit();
             try
             {
                 msg.position( pos + Message.HEADER_SIZE + 2 );
-                final short length = msg.getShort();
-                if (length > 0)
+                final short audioFormatLength = msg.getShort();
+                if (audioFormatLength > 0)
                 {
                     final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
+                    msg.limit( msg.position() + audioFormatLength );
+                    ret = decoder.decode(msg.getNioByteBuffer()).toString();
+                }
+            }
+            finally
+            {
+                msg.position( pos );
+                msg.limit( limit );
+            }
+            return ret;
+        }
+
+        public static String getStationName( RetainableByteBuffer msg ) throws CharacterCodingException
+        {
+            String ret = null;
+            final int pos = msg.position();
+            try
+            {
+                final short audioFormatLength = msg.getShort( pos + Message.HEADER_SIZE + 2 );
+                msg.position( pos + Message.HEADER_SIZE + 2 + 2 + audioFormatLength );
+                final short stationNameLength = msg.getShort();
+                if (stationNameLength > 0)
+                {
+                    final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
+                    msg.limit( msg.position() + stationNameLength );
                     ret = decoder.decode(msg.getNioByteBuffer()).toString();
                 }
             }
@@ -122,55 +147,106 @@ public class Protocol
         }
     }
 
-    public static class HandshakeReply extends Message
+    public static class HandshakeReplyOk extends Message
     {
-        /* short : version
-         * short : status
-         * short : audio format length
+        /* short : audio format length
          * str   : audio format
+         * short : station name length
+         * short : station name
          */
-        public static final short ID = MSG_HANDSHAKE_REPLY;
+        public static final short ID = MSG_HANDSHAKE_REPLY_OK;
 
-        private static ByteBuffer create( short status, String str ) throws CharacterCodingException
+        public static ByteBuffer create( String audioFormat, String stationName ) throws CharacterCodingException
         {
             final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
-            final ByteBuffer bb = encoder.encode( CharBuffer.wrap(str) );
-            final ByteBuffer msg = create( ID, (short) (2 + 2 + 2 + bb.remaining()) );
-            msg.putShort( VERSION );
-            msg.putShort( status );
+            final ByteBuffer audioFormatBB = encoder.encode( CharBuffer.wrap(audioFormat) );
+            final ByteBuffer stationNameBB = encoder.encode( CharBuffer.wrap(stationName) );
+            final ByteBuffer msg = create( ID, (short) (2 + audioFormatBB.remaining() + 2 + stationNameBB.remaining()) );
+            msg.putShort( (short) audioFormatBB.remaining() );
+            msg.put( audioFormatBB );
+            msg.putShort((short) stationNameBB.remaining());
+            msg.put( stationNameBB );
+            msg.rewind();
+            return msg;
+        }
+
+        public static String getAudioFormat( RetainableByteBuffer msg ) throws CharacterCodingException
+        {
+            String ret = null;
+            final int pos = msg.position();
+            final int limit = msg.limit();
+            try
+            {
+                msg.position( pos + Message.HEADER_SIZE );
+                final short audioFormatLength = msg.getShort();
+                if (audioFormatLength > 0)
+                {
+                    final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
+                    msg.limit( msg.position() + audioFormatLength );
+                    ret = decoder.decode(msg.getNioByteBuffer()).toString();
+                }
+            }
+            finally
+            {
+                msg.position( pos );
+                msg.limit( limit );
+            }
+            return ret;
+        }
+
+        public static String getStationName( RetainableByteBuffer msg ) throws CharacterCodingException
+        {
+            String ret = null;
+            final int pos = msg.position();
+            final int limit = msg.limit();
+            try
+            {
+                final short audioFormatLength = msg.getShort( pos + Message.HEADER_SIZE );
+                msg.position( pos + Message.HEADER_SIZE + 2 + audioFormatLength );
+                final short stationNameLength = msg.getShort();
+                if (stationNameLength > 0)
+                {
+                    final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
+                    msg.limit( msg.position() + stationNameLength );
+                    ret = decoder.decode(msg.getNioByteBuffer()).toString();
+                }
+            }
+            finally
+            {
+                msg.position( pos );
+                msg.limit( limit );
+            }
+            return ret;
+        }
+    }
+
+    public static class HandshakeReplyFail extends Message
+    {
+        /* short : status text length
+         * str   : status text
+         */
+        public static final short ID = MSG_HANDSHAKE_REPLY_FAIL;
+
+        public static ByteBuffer create( String statusText ) throws CharacterCodingException
+        {
+            final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
+            final ByteBuffer bb = encoder.encode( CharBuffer.wrap(statusText) );
+            final ByteBuffer msg = create( ID, (short) (2 + 2 + bb.remaining()) );
             msg.putShort( (short) bb.remaining() );
             msg.put( bb );
             msg.rewind();
             return msg;
         }
 
-        public static ByteBuffer createOk( String audioFormat ) throws CharacterCodingException
-        {
-            return create( StatusOk, audioFormat );
-        }
-
-        public static ByteBuffer createFail( String statusText ) throws CharacterCodingException
-        {
-            return create( StatusFail, statusText );
-        }
-
-        public static short getStatus( RetainableByteBuffer msg )
-        {
-            return msg.getShort( msg.position() + HEADER_SIZE + 2 );
-        }
-
-        /* Returns audio format if status is StatusOk,
-         * error message if status is StatusFail
-         */
-        public static String getString( RetainableByteBuffer msg ) throws CharacterCodingException
+        public static String getStatusText( RetainableByteBuffer msg ) throws CharacterCodingException
         {
             String ret = null;
             final int pos = msg.position();
             try
             {
-                msg.position( pos + Message.HEADER_SIZE + 2 + 2 );
+                msg.position( pos + Message.HEADER_SIZE );
                 final short length = msg.getShort();
-                if (length != 0)
+                if (length > 0)
                 {
                     final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
                     ret = decoder.decode(msg.getNioByteBuffer()).toString();
@@ -193,15 +269,21 @@ public class Protocol
             return HEADER_SIZE + audioFrameSize;
         }
 
-        public static int getDataOffs()
+        public static ByteBuffer init( ByteBuffer byteBuffer, int frameSize )
         {
-            return HEADER_SIZE;
+            return Message.init( byteBuffer, (short) getMessageSize(frameSize), ID );
         }
 
-        public static ByteBuffer getAudioData( RetainableByteBuffer msg )
+        public static RetainableByteBuffer getAudioData( RetainableByteBuffer msg )
         {
-            msg.position( msg.position() + HEADER_SIZE );
-            return msg.getNioByteBuffer();
+            final int remaining = msg.remaining();
+            final short messageLength = msg.getShort(); // skip message length
+            if (BuildConfig.DEBUG && (messageLength != remaining))
+                throw new InvalidParameterException();
+            final short messageID = msg.getShort();
+            if (BuildConfig.DEBUG && (messageID != ID))
+                throw new AssertionError();
+            return msg.slice();
         }
     }
 
