@@ -51,6 +51,12 @@ public class MainActivity extends Activity
     private static final int DISCOVERY_STATE_START = 1;
     private static final int DISCOVERY_STATE_RUN = 2;
 
+    private int m_audioStream;
+    private int m_audioMaxVolume;
+    private int m_audioVolume;
+
+    private ListViewAdapter m_listViewAdapter;
+
     private AudioRecorder m_audioRecorder;
     private String m_stationName;
     private NsdManager m_nsdManager;
@@ -58,10 +64,6 @@ public class MainActivity extends Activity
     private Thread m_colliderThread;
     private int m_pingInterval;
     private Channel m_channel;
-
-    private int m_audioStream;
-    private int m_audioMaxVolume;
-    private int m_audioVolume;
 
     /* We could handle a discovery state with m_discoveryListener only
      * (m_discoveryListener ==null means the discovery is not started)
@@ -82,6 +84,63 @@ public class MainActivity extends Activity
             else if (event.getAction() == MotionEvent.ACTION_UP)
                 m_audioRecorder.stopRecording();
             return false;
+        }
+    }
+
+    private static class ListViewAdapter extends ArrayAdapter<StationInfo>
+    {
+        private final LayoutInflater m_inflater;
+        private StationInfo [] m_stationInfo;
+
+        static class RowViewInfo
+        {
+            public final TextView textViewStationName;
+            public final TextView textViewStationAddr;
+
+            public RowViewInfo( TextView textViewStationName, TextView textViewStationAddr )
+            {
+                this.textViewStationName = textViewStationName;
+                this.textViewStationAddr = textViewStationAddr;
+            }
+        }
+
+        public ListViewAdapter( Context context )
+        {
+            super( context, R.layout.list_view_row );
+            m_inflater = (LayoutInflater) context.getSystemService( LAYOUT_INFLATER_SERVICE );
+            m_stationInfo = new StationInfo[0];
+        }
+
+        public void setStationInfo( StationInfo [] stationInfo )
+        {
+            m_stationInfo = stationInfo;
+            notifyDataSetChanged();
+        }
+
+        public int getCount()
+        {
+            return m_stationInfo.length;
+        }
+
+        public View getView( int position, View convertView, ViewGroup parent )
+        {
+            View rowView = convertView;
+            RowViewInfo rowViewInfo;
+            if (rowView == null)
+            {
+                rowView = m_inflater.inflate( R.layout.list_view_row, null, true );
+                final TextView textViewStationName = (TextView) rowView.findViewById( R.id.textViewStationName );
+                final TextView textViewStationAddr = (TextView) rowView.findViewById( R.id.textViewStationAddr );
+                rowViewInfo = new RowViewInfo( textViewStationName, textViewStationAddr );
+                rowView.setTag( rowViewInfo );
+            }
+            else
+                rowViewInfo = (RowViewInfo) rowView.getTag();
+
+            rowViewInfo.textViewStationName.setText( m_stationInfo[position].name );
+            rowViewInfo.textViewStationAddr.setText( m_stationInfo[position].addr );
+
+            return rowView;
         }
     }
 
@@ -275,6 +334,10 @@ public class MainActivity extends Activity
         super.onResume();
         Log.i( LOG_TAG, "onResume" );
 
+        m_listViewAdapter = new ListViewAdapter( this );
+        final ListView listView = (ListView) findViewById( R.id.listView );
+        listView.setAdapter( m_listViewAdapter );
+
         try
         {
             m_collider = Collider.create();
@@ -325,7 +388,7 @@ public class MainActivity extends Activity
         if (m_nsdManager == null)
         {
             final AlertDialog.Builder builder = new AlertDialog.Builder( this );
-            builder.setTitle( getString(R.string.system_error) );
+            builder.setTitle( getString( R.string.system_error ) );
             builder.setMessage( getString(R.string.nsd_not_found) );
             builder.setPositiveButton( getString(R.string.close), null );
             final AlertDialog alertDialog = builder.create();
@@ -342,7 +405,7 @@ public class MainActivity extends Activity
         /* Show the channel name with gray color at start,
          * and change color to green after registration.
          */
-        final TextView textView = (TextView) findViewById( R.id.textChannelState );
+        final TextView textView = (TextView) findViewById( R.id.textViewStatus );
         textView.setText( SERVICE_NAME );
         textView.setTextColor( Color.GRAY );
 
@@ -485,14 +548,39 @@ public class MainActivity extends Activity
         Log.i( LOG_TAG, "onPause: done" );
     }
 
-    public void setStatusText( final String text )
+    public void onChannelStarted( final String channelName, final int portNumber )
     {
         runOnUiThread( new Runnable() {
             public void run()
             {
-                final TextView textView = (TextView) findViewById( R.id.textChannelState );
-                textView.setText( text );
+                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
+                final StringBuilder sb = new StringBuilder();
+                sb.append( channelName );
+                sb.append( getString(R.string._colon) );
+                sb.append( Integer.toString(portNumber) );
+                textView.setText( sb.toString() );
             }
         });
+    }
+
+    public void onChannelRegistered()
+    {
+        runOnUiThread( new Runnable() {
+            public void run()
+            {
+                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
+                textView.setTextColor( Color.GREEN );
+            }
+        });
+    }
+
+    public void onStationListChanged( final StationInfo [] stationInfo )
+    {
+        runOnUiThread( new Runnable() {
+            public void run()
+            {
+                m_listViewAdapter.setStationInfo( stationInfo );
+            }
+        } );
     }
 }

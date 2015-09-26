@@ -195,6 +195,6 @@ public class HandshakeServerSession implements Session.Listener
                 Thread.currentThread().interrupt();
             }
         }
-        m_channel.removeSession( m_session );
+        m_channel.removeSession( null, m_session );
     }
 }

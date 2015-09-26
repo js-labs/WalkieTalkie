@@ -30,7 +30,6 @@ import org.jsl.collider.Collider;
 import org.jsl.collider.Session;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -62,11 +61,10 @@ class Channel
 
     private final ReentrantLock m_lock;
     private final TreeMap<String, ServiceInfo> m_serviceInfo;
-    private final HashMap<Session, String> m_sessions;
+    private final TreeMap<Session, String> m_sessions;
     private ChannelAcceptor m_acceptor;
     private RegistrationListener m_registrationListener;
     private String m_serviceName;
-    private int m_portNumber;
     private boolean m_stop;
     private Phaser m_phaser;
 
@@ -169,7 +167,7 @@ class Channel
                             Log.d( LOG_TAG, m_name + ": skip service " + entry.getKey() );
                     }
 
-                    m_activity.setStatusText( formatStatusTextLocked() );
+                    m_activity.onChannelRegistered();
                     return;
                 }
                 acceptor = m_acceptor;
@@ -469,6 +467,7 @@ class Channel
         public void onAcceptorStarted( Collider collider, int localPort )
         {
             Log.i( LOG_TAG, m_name + ": acceptor started: " + localPort );
+            m_activity.onChannelStarted( m_name, localPort );
 
             /* In a case if service with the same name already registered
              * NSD (Bonjour) adds a "(<number>)" to the new service's name.
@@ -480,7 +479,6 @@ class Channel
             {
                 if (!m_stop)
                 {
-                    m_portNumber = localPort;
                     final NsdServiceInfo serviceInfo = new NsdServiceInfo();
                     final int coderFlags = (Base64.NO_PADDING | Base64.NO_WRAP);
                     final String serviceName = Base64.encodeToString(m_name.getBytes(), coderFlags) + MainActivity.SERVICE_NAME_SEPARATOR;
@@ -651,52 +649,47 @@ class Channel
         }
     }
 
-    private String formatStatusTextLocked()
+    private StationInfo [] getStationListLocked()
     {
-        /* Lock is supposed to be locked. */
+        /* Lock is supposed to be held by current thread. */
         if (BuildConfig.DEBUG && !m_lock.isHeldByCurrentThread())
             throw new AssertionError();
 
-        final StringBuilder sb = new StringBuilder();
-        sb.append( m_name );
-        if (m_portNumber != 0)
+        int sessions = 0;
+        for (TreeMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
-            sb.append( " : " );
-            sb.append( m_portNumber );
+            if (e.getValue().stationName != null)
+                sessions++;
         }
-        sb.append( '\n' );
 
-        /* Sessions created with connector */
-        for (HashMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
+        for (TreeMap.Entry<Session, String> e : m_sessions.entrySet())
         {
-            final ServiceInfo serviceInfo = e.getValue();
-            if (serviceInfo.session != null)
+            if (e.getValue() != null)
+                sessions++;
+        }
+
+        final StationInfo [] stationInfo = new StationInfo[sessions];
+        int idx = 0;
+
+        for (TreeMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
+        {
+            if (e.getValue().stationName != null)
             {
-                sb.append( e.getKey() );
-                sb.append( " : " );
-                sb.append( serviceInfo.session.getRemoteAddress() );
-                if (serviceInfo.stationName != null)
-                {
-                    sb.append( " : " );
-                    sb.append( serviceInfo.stationName );
-                }
+                stationInfo[idx++] = new StationInfo(
+                        e.getValue().stationName, e.getValue().session.getRemoteAddress().toString() );
             }
         }
 
-        /* Sessions created with acceptor */
-        for (HashMap.Entry<Session, String> e : m_sessions.entrySet())
+        for (TreeMap.Entry<Session, String> e : m_sessions.entrySet())
         {
-            final Session session = e.getKey();
-            final String stationName = e.getValue();
-            sb.append( session.getRemoteAddress().toString() );
-            if (stationName != null)
+            if (e.getValue() != null)
             {
-                sb.append( " : " );
-                sb.append( stationName );
+                stationInfo[idx++] = new StationInfo(
+                        e.getValue(), e.getKey().getRemoteAddress().toString() );
             }
         }
 
-        return sb.toString();
+        return stationInfo;
     }
 
     public Channel(
@@ -722,7 +715,7 @@ class Channel
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
         m_serviceInfo = new TreeMap<String, ServiceInfo>();
-        m_sessions = new HashMap<Session, String>();
+        m_sessions = new TreeMap<Session, String>();
         m_lock = new ReentrantLock();
 
         m_acceptor = new ChannelAcceptor();
@@ -795,6 +788,9 @@ class Channel
 
     public void setStationName( Session session, String stationName )
     {
+        /* Called by the server session channel
+         * when received a login request with a client station name.
+         */
         m_lock.lock();
         try
         {
@@ -803,7 +799,7 @@ class Channel
                 if (m_sessions.get(session) == null)
                 {
                     m_sessions.put( session, stationName );
-                    m_activity.setStatusText( formatStatusTextLocked() );
+                    m_activity.onStationListChanged( getStationListLocked() );
                 }
                 else
                 {
@@ -827,6 +823,9 @@ class Channel
 
     public void setStationName( String serviceName, String stationName )
     {
+        /* Called by the client session channel
+         * when we received login reply with a server station name.
+         */
         m_lock.lock();
         try
         {
@@ -834,49 +833,11 @@ class Channel
             {
                 final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
                 serviceInfo.stationName = stationName;
-                m_activity.setStatusText( formatStatusTextLocked() );
+                m_activity.onStationListChanged( getStationListLocked() );
             }
             else
             {
                 Log.e( LOG_TAG, "internal error: service [" + serviceName + "] not found." );
-                if (BuildConfig.DEBUG)
-                    throw new AssertionError();
-            }
-        }
-        finally
-        {
-            m_lock.unlock();
-        }
-    }
-
-    public void removeSession( Session session )
-    {
-        m_lock.lock();
-        try
-        {
-            if (m_sessions.containsKey(session))
-            {
-                m_sessions.remove( session );
-                m_activity.setStatusText( formatStatusTextLocked() );
-
-                if (m_stop)
-                {
-                    if ((m_acceptor == null) && (getPendingOpsLocked() == 0))
-                    {
-                        m_stop = false;
-                        if (m_phaser != null)
-                        {
-                            final int phase = m_phaser.arriveAndDeregister();
-                            if (BuildConfig.DEBUG && (phase != 0))
-                                throw new AssertionError();
-                            m_phaser = null;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
                 if (BuildConfig.DEBUG)
                     throw new AssertionError();
             }
@@ -898,7 +859,7 @@ class Channel
                 if (m_sessions.containsKey(session))
                 {
                     m_sessions.remove( session );
-                    m_activity.setStatusText( formatStatusTextLocked() );
+                    m_activity.onStationListChanged( getStationListLocked() );
                 }
                 else
                 {
@@ -924,7 +885,7 @@ class Channel
 
                     serviceInfo.session = null;
                     serviceInfo.stationName = null;
-                    m_activity.setStatusText( formatStatusTextLocked() );
+                    m_activity.onStationListChanged( getStationListLocked() );
                 }
             }
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="_colon"> : </string>
     <string name="about">About</string>
     <string name="app_name">Walkie Talkie</string>
     <string name="cancel">Cancel</string>
@@ -10,5 +11,6 @@
     <string name="settings">Settings</string>
     <string name="station_name">Station name</string>
     <string name="system_error">System error</string>
+    <string name="talk">\nTalk\n</string>
     <string name="volume">Volume</string>
 </resources>
