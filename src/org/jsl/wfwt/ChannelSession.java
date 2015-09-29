@@ -50,9 +50,7 @@ public class ChannelSession implements Session.Listener
 
     private String getLogPrefix()
     {
-        return m_channel.getName() + ": " +
-               m_session.getLocalAddress() + " -> " +
-               m_session.getRemoteAddress() + ": ";
+        return m_channel.getName() + " " + m_session.getRemoteAddress();
     }
 
     private class TimerHandler implements Runnable

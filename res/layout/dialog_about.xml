@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:orientation="vertical"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+    <TextView
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:text="@string/about_text"
+            android:id="@+id/textView" android:layout_gravity="center_horizontal" android:linksClickable="true"
+            android:scrollbars="vertical"
+            android:autoLink="web"
+            android:padding="5dp" android:longClickable="false"/>
+</LinearLayout>

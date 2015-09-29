@@ -28,6 +28,7 @@ import android.media.AudioManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
+import android.text.method.LinkMovementMethod;
 import android.util.Base64;
 import android.util.Log;
 import android.view.*;
@@ -304,26 +305,39 @@ public class MainActivity extends Activity
 
     public boolean onOptionsItemSelected( MenuItem item )
     {
+        final LayoutInflater layoutInflater = LayoutInflater.from( this );
+        final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder( this );
         switch (item.getItemId())
         {
             case R.id.actionSettings:
-                final LayoutInflater layoutInflater = LayoutInflater.from( this );
-                final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder( this );
+            {
                 final View dialogView = layoutInflater.inflate( R.layout.dialog_settings, null );
                 final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
                 editText.setText( m_stationName );
                 seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
+                dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
                 dialogBuilder.setCancelable( true );
                 dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(editText, seekBar) );
                 dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
                 final AlertDialog dialog = dialogBuilder.create();
                 dialog.show();
+            }
             break;
 
             case R.id.actionAbout:
+            {
+                final View dialogView = layoutInflater.inflate( R.layout.dialog_about, null );
+                final TextView textView = (TextView) dialogView.findViewById( R.id.textView );
+                textView.setMovementMethod( LinkMovementMethod.getInstance() /*new ScrollingMovementMethod()*/ );
+                dialogBuilder.setTitle( R.string.about );
+                dialogBuilder.setView( dialogView );
+                dialogBuilder.setPositiveButton( getString(R.string.close), null );
+                final AlertDialog dialog = dialogBuilder.create();
+                dialog.show();
+            }
             break;
         }
         return super.onOptionsItemSelected( item );

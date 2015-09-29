@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.LinkedHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 class Channel
@@ -61,7 +62,7 @@ class Channel
 
     private final ReentrantLock m_lock;
     private final TreeMap<String, ServiceInfo> m_serviceInfo;
-    private final TreeMap<Session, String> m_sessions;
+    private final LinkedHashMap<Session, String> m_sessions;
     private ChannelAcceptor m_acceptor;
     private RegistrationListener m_registrationListener;
     private String m_serviceName;
@@ -143,7 +144,7 @@ class Channel
                     /* Now we have to connect to already discovered services. */
                     m_registrationListener = this;
                     m_serviceName = nsdServiceInfo.getServiceName();
-                    for (TreeMap.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
+                    for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
                     {
                         if (m_serviceName.compareTo(entry.getKey()) > 0)
                         {
@@ -435,7 +436,7 @@ class Channel
     {
         public Session.Listener createSessionListener( Session session )
         {
-            Log.i( LOG_TAG, m_name + ": session accepted: " + session.getRemoteAddress() );
+            Log.i( LOG_TAG, m_name + " " + session.getRemoteAddress() + ": session accepted" );
             m_lock.lock();
             try
             {
@@ -656,13 +657,13 @@ class Channel
             throw new AssertionError();
 
         int sessions = 0;
-        for (TreeMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
+        for (Map.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
             if (e.getValue().stationName != null)
                 sessions++;
         }
 
-        for (TreeMap.Entry<Session, String> e : m_sessions.entrySet())
+        for (Map.Entry<Session, String> e : m_sessions.entrySet())
         {
             if (e.getValue() != null)
                 sessions++;
@@ -671,7 +672,7 @@ class Channel
         final StationInfo [] stationInfo = new StationInfo[sessions];
         int idx = 0;
 
-        for (TreeMap.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
+        for (Map.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
             if (e.getValue().stationName != null)
             {
@@ -680,7 +681,7 @@ class Channel
             }
         }
 
-        for (TreeMap.Entry<Session, String> e : m_sessions.entrySet())
+        for (Map.Entry<Session, String> e : m_sessions.entrySet())
         {
             if (e.getValue() != null)
             {
@@ -715,7 +716,7 @@ class Channel
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
         m_serviceInfo = new TreeMap<String, ServiceInfo>();
-        m_sessions = new TreeMap<Session, String>();
+        m_sessions = new LinkedHashMap<Session, String>();
         m_lock = new ReentrantLock();
 
         m_acceptor = new ChannelAcceptor();
@@ -871,10 +872,10 @@ class Channel
             else
             {
                 /* session created with connector */
-                final ServiceInfo serviceInfo = m_serviceInfo.get(serviceName);
+                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
                 if (serviceInfo == null)
                 {
-                    Log.e(LOG_TAG, m_name + ": internal error: service session [" + serviceName + "] not found");
+                    Log.e( LOG_TAG, m_name + ": internal error: service session [" + serviceName + "] not found" );
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
                 }
@@ -983,7 +984,7 @@ class Channel
                     {
                         m_nsdManager.unregisterService( m_registrationListener );
 
-                        for (TreeMap.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
+                        for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
                         {
                             final Session session = entry.getValue().session;
                             if (session != null)

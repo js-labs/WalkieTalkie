@@ -2,6 +2,16 @@
 <resources>
     <string name="_colon"> : </string>
     <string name="about">About</string>
+    <string name="about_text">
+        This program transmits sound recorded from microphone to some other devices
+        running the same program, so works like Walkie Talkie radio.\n\n
+        Devices find each other by NSD (aka Bonjour).\n\n
+        Program released under GPL licence, source code available at
+        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+        Application use JS-Collider (scalable Java NIO framework), see
+        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
+        for further details.
+    </string>
     <string name="app_name">Walkie Talkie</string>
     <string name="cancel">Cancel</string>
     <string name="close">Close</string>
