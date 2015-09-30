@@ -70,7 +70,7 @@ public class AudioRecorder implements Runnable
         m_bufferSize = bufferSize;
         if (repeat)
         {
-            m_audioPlayer = AudioPlayer.create( audioFormat );
+            m_audioPlayer = AudioPlayer.create( audioFormat, "Repeat" );
             m_list = new LinkedList<RetainableByteBuffer>();
         }
         else
@@ -124,7 +124,7 @@ public class AudioRecorder implements Runnable
                             int msgs = 0;
                             for (RetainableByteBuffer msg : m_list)
                             {
-                                m_audioPlayer.write( msg );
+                                m_audioPlayer.play( msg );
                                 msg.release();
                                 msgs++;
                             }

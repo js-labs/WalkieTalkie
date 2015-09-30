@@ -93,7 +93,7 @@ public class ChannelSession implements Session.Listener
         {
             case Protocol.AudioFrame.ID:
                 final RetainableByteBuffer audioFrame = Protocol.AudioFrame.getAudioData( msg );
-                m_audioPlayer.write( audioFrame );
+                m_audioPlayer.play( audioFrame );
                 audioFrame.release();
             break;
 
@@ -189,6 +189,7 @@ public class ChannelSession implements Session.Listener
 
         m_channel.removeSession( m_serviceName, m_session );
         m_sessionManager.removeSession( this );
+        m_audioPlayer.stopAndWait();
     }
 
     public final int closeConnection()

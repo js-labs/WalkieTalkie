@@ -51,15 +51,15 @@ public abstract class AudioPlayer
 
     private static abstract class Impl extends AudioPlayer implements Runnable
     {
-        protected final String m_audioFormat;
+        protected final String m_tag;
         protected final Thread m_thread;
         protected final Semaphore m_sema;
         protected Node m_head;
         private volatile Node m_tail;
 
-        protected Impl( String audioFormat )
+        protected Impl( String tag )
         {
-            m_audioFormat = audioFormat;
+            m_tag = tag;
             m_thread = new Thread( this, LOG_TAG );
             m_sema = new Semaphore(0);
         }
@@ -80,9 +80,8 @@ public abstract class AudioPlayer
             return next;
         }
 
-        public void write( RetainableByteBuffer audioFrame )
+        public void play( RetainableByteBuffer audioFrame )
         {
-            //Log.i( LOG_TAG, m_audioFormat + ": remaining=" + audioFrame.remaining() );
             final Node node = new Node( audioFrame );
             audioFrame.retain();
 
@@ -146,31 +145,16 @@ public abstract class AudioPlayer
     {
         private final AudioTrack m_audioTrack;
 
-        public PcmImpl( String audioFormat, int sampleRate )
+        public PcmImpl( String tag, AudioTrack audioTrack )
         {
-            super( audioFormat );
-
-            final int minBufferSize = AudioTrack.getMinBufferSize(
-                    sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT );
-
-            int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 10);
-            if (bufferSize < minBufferSize)
-                bufferSize = minBufferSize;
-
-            m_audioTrack = new AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize,
-                    AudioTrack.MODE_STREAM );
-
+            super( tag );
+            m_audioTrack = audioTrack;
             m_thread.start();
         }
 
         public void run()
         {
-            Log.i( LOG_TAG, "run [" + m_audioFormat + "]" );
+            Log.i( LOG_TAG, m_tag + ": run" );
             loop: for (;;)
             {
                 try
@@ -211,11 +195,11 @@ public abstract class AudioPlayer
             }
 
             m_audioTrack.release();
-            Log.i( LOG_TAG, "run [" + m_audioFormat + "]: done" );
+            Log.i( LOG_TAG, m_tag + ": done" );
         }
     }
 
-    public static AudioPlayer create( String audioFormat )
+    public static AudioPlayer create( String audioFormat, String tag )
     {
         final String [] ss = audioFormat.split(":");
         try
@@ -225,7 +209,23 @@ public abstract class AudioPlayer
                 if ((ss[0].compareTo("PCM") == 0) && (ss.length > 1))
                 {
                     final int sampleRate = Integer.parseInt( ss[1] );
-                    return new PcmImpl( audioFormat, sampleRate );
+
+                    final int minBufferSize = AudioTrack.getMinBufferSize(
+                            sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT );
+
+                    int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 10);
+                    if (bufferSize < minBufferSize)
+                        bufferSize = minBufferSize;
+
+                    final AudioTrack audioTrack = new AudioTrack(
+                            AudioManager.STREAM_MUSIC,
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            bufferSize,
+                            AudioTrack.MODE_STREAM );
+
+                    return new PcmImpl( audioFormat + " " + tag, audioTrack );
                 }
             }
         }
@@ -236,6 +236,6 @@ public abstract class AudioPlayer
         return null;
     }
 
-    public abstract void write( RetainableByteBuffer audioFrame );
+    public abstract void play( RetainableByteBuffer audioFrame );
     public abstract void stopAndWait();
 }

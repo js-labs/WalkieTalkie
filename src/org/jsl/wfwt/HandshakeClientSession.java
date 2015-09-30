@@ -129,7 +129,7 @@ public class HandshakeClientSession implements Session.Listener
                 {
                     final String audioFormat = Protocol.HandshakeReplyOk.getAudioFormat( msg );
                     final String stationName = Protocol.HandshakeReplyOk.getStationName( msg );
-                    final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat );
+                    final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat, m_session.getRemoteAddress().toString() );
                     if (audioPlayer == null)
                     {
                         Log.w( LOG_TAG, getLogPrefix() +
