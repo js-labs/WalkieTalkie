@@ -92,7 +92,9 @@ public class ChannelSession implements Session.Listener
         switch (messageID)
         {
             case Protocol.AudioFrame.ID:
-                m_audioPlayer.write( Protocol.AudioFrame.getAudioData(msg) );
+                final RetainableByteBuffer audioFrame = Protocol.AudioFrame.getAudioData( msg );
+                m_audioPlayer.write( audioFrame );
+                audioFrame.release();
             break;
 
             case Protocol.Ping.ID:
@@ -169,7 +171,7 @@ public class ChannelSession implements Session.Listener
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
+        Log.i( LOG_TAG, getLogPrefix() + ": connection closed" );
 
         if (m_timerHandler != null)
         {

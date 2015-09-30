@@ -389,10 +389,12 @@ public class MainActivity extends Activity
         String str = sharedPreferences.getString( KEY_VOLUME, "" );
         if (!str.isEmpty())
         {
-            try {
+            try
+            {
                 m_audioVolume = Integer.parseInt( str );
             }
-            catch (final NumberFormatException ex) {
+            catch (final NumberFormatException ex)
+            {
                 m_audioVolume = audioManager.getStreamMaxVolume( m_audioStream );
             }
         }
