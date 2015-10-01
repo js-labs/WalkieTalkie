@@ -787,6 +787,46 @@ class Channel
         }
     }
 
+    public void removeService( NsdServiceInfo nsdServiceInfo )
+    {
+        /* Run in the NSD manager thread */
+        final String serviceName = nsdServiceInfo.getServiceName();
+
+        m_lock.lock();
+        try
+        {
+            final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+            if (serviceInfo == null)
+            {
+                /* Should not happen,
+                 * but probably would be better to handle a case.
+                 */
+                Log.w( LOG_TAG, "Internal error: service was not registered: " + nsdServiceInfo );
+            }
+            else
+            {
+                if ((serviceInfo.resolveListener == null) &&
+                    (serviceInfo.connector == null) &&
+                    (serviceInfo.session == null))
+                {
+                    m_serviceInfo.remove( serviceName );
+                    m_activity.onStationListChanged( getStationListLocked() );
+                }
+                else
+                {
+                    /* There is still some activity with this service,
+                     * let's keep it while all tasks will not be done.
+                     */
+                    serviceInfo.nsdServiceInfo = null;
+                }
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
     public void setStationName( Session session, String stationName )
     {
         /* Called by the server session channel
@@ -909,47 +949,6 @@ class Channel
         {
             m_lock.unlock();
         }
-    }
-
-    public boolean removeService( NsdServiceInfo nsdServiceInfo )
-    {
-        if (BuildConfig.DEBUG && (Looper.getMainLooper().getThread() != Thread.currentThread()))
-            throw new AssertionError();
-
-        final String serviceName = nsdServiceInfo.getServiceName();
-
-        m_lock.lock();
-        try
-        {
-            final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
-            if (serviceInfo == null)
-            {
-                /* Should not happen,
-                 * but probably would be better to handle a case.
-                 */
-                Log.w( LOG_TAG, "Internal error: service was not registered: " + nsdServiceInfo );
-                return false;
-            }
-
-            if ((serviceInfo.resolveListener == null) &&
-                (serviceInfo.connector == null) &&
-                (serviceInfo.session == null))
-            {
-                m_serviceInfo.remove( serviceName );
-                return (m_serviceInfo.isEmpty() && (m_acceptor == null));
-            }
-
-            /* There is still some activity with this service,
-             * let's keep it while all tasks will not be done.
-             */
-            serviceInfo.nsdServiceInfo = null;
-        }
-        finally
-        {
-            m_lock.unlock();
-        }
-
-        return false;
     }
 
     public boolean isConnected()

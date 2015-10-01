@@ -27,6 +27,7 @@ import android.graphics.Color;
 import android.media.AudioManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.method.LinkMovementMethod;
 import android.util.Base64;
@@ -375,6 +376,9 @@ public class MainActivity extends Activity
 
         final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
         m_stationName = sharedPreferences.getString( KEY_STATION_NAME, "" );
+        if ((m_stationName == null) || m_stationName.isEmpty())
+            m_stationName = Build.MODEL;
+
         if (!m_stationName.isEmpty())
         {
             final String title = getString(R.string.app_name) + " : " + m_stationName;
