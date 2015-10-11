@@ -29,6 +29,7 @@ import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.method.LinkMovementMethod;
 import android.util.Base64;
 import android.util.Log;
@@ -38,6 +39,8 @@ import org.jsl.collider.Collider;
 import org.jsl.collider.TimerQueue;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.util.Random;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -52,6 +55,8 @@ public class MainActivity extends Activity
 
     private static final int DISCOVERY_STATE_START = 1;
     private static final int DISCOVERY_STATE_RUN = 2;
+
+    private String m_deviceID;
 
     private int m_audioStream;
     private int m_audioMaxVolume;
@@ -231,7 +236,7 @@ public class MainActivity extends Activity
                 final String channelName = new String( Base64.decode(ss[0], 0) );
                 Log.i( LOG_TAG, "service found: " + channelName + " [" + nsdServiceInfo + "]" );
                 if (channelName.compareTo(SERVICE_NAME) == 0)
-                    m_channel.addService( nsdServiceInfo );
+                    m_channel.onServiceFound( nsdServiceInfo );
             }
             catch (final IllegalArgumentException ex)
             {
@@ -250,20 +255,11 @@ public class MainActivity extends Activity
                 final String channelName = new String( Base64.decode(ss[0], 0) );
                 Log.i( LOG_TAG, "service lost: " + channelName + " [" + nsdServiceInfo + "]" );
                 if (channelName.compareTo(SERVICE_NAME) == 0)
-                {
-                    final NsdServiceInfo final_nsdServiceInfo = nsdServiceInfo;
-                    runOnUiThread( new Runnable() {
-                        public void run() {
-                            m_channel.removeService(final_nsdServiceInfo);
-                        }
-                    });
-                }
+                    m_channel.onServiceLost( nsdServiceInfo );
             }
             catch (final IllegalArgumentException ex)
             {
-                /* Base64.decode() can theow an exception,
-                 * will be better to handle it.
-                 */
+                /* Base64.decode() can throw an exception, will be better to handle it. */
                 Log.w( LOG_TAG, ex.toString() );
             }
         }
@@ -282,6 +278,40 @@ public class MainActivity extends Activity
             m_collider.run();
             Log.i( LOG_TAG, "Collider thread: done" );
         }
+    }
+
+    private String getDeviceID()
+    {
+        long deviceID = 0;
+        final String str = Settings.Secure.getString( getContentResolver(), Settings.Secure.ANDROID_ID );
+        if (str != null)
+        {
+            try
+            {
+                final BigInteger bi = new BigInteger( str, 16 );
+                deviceID = bi.longValue();
+            }
+            catch (final NumberFormatException ex)
+            {
+                /* Nothing critical */
+                Log.i( LOG_TAG, ex.toString() );
+            }
+        }
+
+        if (deviceID == 0)
+        {
+            /* Let's use random number */
+            deviceID = new Random().nextLong();
+        }
+
+        final byte [] bb = new byte[Long.SIZE / Byte.SIZE];
+        for (int idx=(bb.length - 1); idx>=0; idx--)
+        {
+            bb[idx] = (byte) (deviceID & 0xFF);
+            deviceID >>= Byte.SIZE;
+        }
+
+        return Base64.encodeToString( bb, (Base64.NO_PADDING | Base64.NO_WRAP) );
     }
 
     public void onCreate( Bundle savedInstanceState )
@@ -348,6 +378,8 @@ public class MainActivity extends Activity
     {
         super.onResume();
         Log.i( LOG_TAG, "onResume" );
+
+        m_deviceID = getDeviceID();
 
         m_listViewAdapter = new ListViewAdapter( this );
         final ListView listView = (ListView) findViewById( R.id.listView );
@@ -430,8 +462,9 @@ public class MainActivity extends Activity
         textView.setTextColor( Color.GRAY );
 
         m_channel = new Channel(
-                m_audioRecorder.getAudioFormat(),
+                m_deviceID,
                 m_stationName,
+                m_audioRecorder.getAudioFormat(),
                 this,
                 m_collider,
                 m_nsdManager,
@@ -583,12 +616,16 @@ public class MainActivity extends Activity
         });
     }
 
-    public void onChannelRegistered()
+    public void onChannelRegistered( final String serviceName )
     {
         runOnUiThread( new Runnable() {
             public void run()
             {
                 final TextView textView = (TextView) findViewById( R.id.textViewStatus );
+                String str = textView.getText().toString();
+                str += "\n";
+                str += serviceName;
+                textView.setText( str );
                 textView.setTextColor( Color.GREEN );
             }
         });

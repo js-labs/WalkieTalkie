@@ -49,8 +49,9 @@ class Channel
         public String stationName;
     }
 
-    private final String m_audioFormat;
+    private final String m_deviceID;
     private final String m_stationName;
+    private final String m_audioFormat;
     private final MainActivity m_activity;
     private final Collider m_collider;
     private final NsdManager m_nsdManager;
@@ -141,9 +142,17 @@ class Channel
             {
                 if (!m_stop)
                 {
+                    if (m_registrationListener != null)
+                    {
+                        Log.i( LOG_TAG, "Duplicate registration: " + nsdServiceInfo );
+                        return;
+                    }
+
                     /* Now we have to connect to already discovered services. */
                     m_registrationListener = this;
                     m_serviceName = nsdServiceInfo.getServiceName();
+                    m_activity.onChannelRegistered( m_serviceName );
+
                     for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
                     {
                         if (m_serviceName.compareTo(entry.getKey()) > 0)
@@ -167,8 +176,6 @@ class Channel
                         else
                             Log.d( LOG_TAG, m_name + ": skip service " + entry.getKey() );
                     }
-
-                    m_activity.onChannelRegistered();
                     return;
                 }
                 acceptor = m_acceptor;
@@ -470,10 +477,8 @@ class Channel
             Log.i( LOG_TAG, m_name + ": acceptor started: " + localPort );
             m_activity.onChannelStarted( m_name, localPort );
 
-            /* In a case if service with the same name already registered
-             * NSD (Bonjour) adds a "(<number>)" to the new service's name.
-             * Let's add some marker (MainActivity.SERVICE_NAME_SEPARATOR)
-             * to be used as an end of the service name later when will be resolved.
+            /* Android NSD implementation is very unstable when services
+             * registers with the same name. Let's use "CHANNEL_NAME:DEVICE_ID:".
              */
             m_lock.lock();
             try
@@ -481,8 +486,11 @@ class Channel
                 if (!m_stop)
                 {
                     final NsdServiceInfo serviceInfo = new NsdServiceInfo();
-                    final int coderFlags = (Base64.NO_PADDING | Base64.NO_WRAP);
-                    final String serviceName = Base64.encodeToString(m_name.getBytes(), coderFlags) + MainActivity.SERVICE_NAME_SEPARATOR;
+                    final String serviceName =
+                            Base64.encodeToString(m_name.getBytes(), (Base64.NO_PADDING | Base64.NO_WRAP)) +
+                            MainActivity.SERVICE_NAME_SEPARATOR +
+                            m_deviceID +
+                            MainActivity.SERVICE_NAME_SEPARATOR;
                     serviceInfo.setServiceType( m_serviceType );
                     serviceInfo.setServiceName( serviceName );
                     serviceInfo.setPort( localPort );
@@ -694,8 +702,9 @@ class Channel
     }
 
     public Channel(
-            String audioFormat,
+            String deviceID,
             String stationName,
+            String audioFormat,
             MainActivity activity,
             Collider collider,
             NsdManager nsdManager,
@@ -705,8 +714,9 @@ class Channel
             TimerQueue timerQueue,
             int pingInterval )
     {
-        m_audioFormat = audioFormat;
+        m_deviceID = deviceID;
         m_stationName = stationName;
+        m_audioFormat = audioFormat;
         m_activity = activity;
         m_collider = collider;
         m_nsdManager = nsdManager;
@@ -731,7 +741,7 @@ class Channel
         }
     }
 
-    public void addService( NsdServiceInfo nsdServiceInfo )
+    public void onServiceFound( NsdServiceInfo nsdServiceInfo )
     {
         /* Run in the NSD manager thread */
         final String serviceName = nsdServiceInfo.getServiceName();
@@ -787,7 +797,7 @@ class Channel
         }
     }
 
-    public void removeService( NsdServiceInfo nsdServiceInfo )
+    public void onServiceLost( NsdServiceInfo nsdServiceInfo )
     {
         /* Run in the NSD manager thread */
         final String serviceName = nsdServiceInfo.getServiceName();
@@ -817,6 +827,7 @@ class Channel
                     /* There is still some activity with this service,
                      * let's keep it while all tasks will not be done.
                      */
+                    serviceInfo.ver = 0;
                     serviceInfo.nsdServiceInfo = null;
                 }
             }
@@ -1000,12 +1011,6 @@ class Channel
         {
             m_lock.unlock();
         }
-    }
-
-    public String toString()
-    {
-        /* The string will be actually displayed in the list view */
-        return m_name + " [" + m_serviceInfo.size() + "]";
     }
 
     public final String getName()
