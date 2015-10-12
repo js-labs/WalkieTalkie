@@ -56,8 +56,6 @@ public class MainActivity extends Activity
     private static final int DISCOVERY_STATE_START = 1;
     private static final int DISCOVERY_STATE_RUN = 2;
 
-    private String m_deviceID;
-
     private int m_audioStream;
     private int m_audioMaxVolume;
     private int m_audioVolume;
@@ -69,7 +67,6 @@ public class MainActivity extends Activity
     private NsdManager m_nsdManager;
     private Collider m_collider;
     private Thread m_colliderThread;
-    private int m_pingInterval;
     private Channel m_channel;
 
     /* We could handle a discovery state with m_discoveryListener only
@@ -379,7 +376,7 @@ public class MainActivity extends Activity
         super.onResume();
         Log.i( LOG_TAG, "onResume" );
 
-        m_deviceID = getDeviceID();
+        final String deviceID = getDeviceID();
 
         m_listViewAdapter = new ListViewAdapter( this );
         final ListView listView = (ListView) findViewById( R.id.listView );
@@ -450,7 +447,6 @@ public class MainActivity extends Activity
         }
 
         final TimerQueue timerQueue = new TimerQueue( m_collider.getThreadPool() );
-        m_pingInterval = 0; //5;
         m_colliderThread = new ColliderThread();
         m_colliderThread.start();
 
@@ -462,7 +458,7 @@ public class MainActivity extends Activity
         textView.setTextColor( Color.GRAY );
 
         m_channel = new Channel(
-                m_deviceID,
+                deviceID,
                 m_stationName,
                 m_audioRecorder.getAudioFormat(),
                 this,
@@ -472,7 +468,7 @@ public class MainActivity extends Activity
                 SERVICE_NAME,
                 sessionManager,
                 timerQueue,
-                m_pingInterval );
+                Config.PING_INTERVAL );
 
         m_stop = false;
         m_discoveryState = DISCOVERY_STATE_START;

@@ -70,12 +70,12 @@ public class ChannelSession implements Session.Listener
         {
             if (++m_pingSent == 10)
             {
-                Log.i( LOG_TAG, getLogPrefix() + "connection timeout, closing connection." );
+                Log.i( LOG_TAG, getLogPrefix() + ": connection timeout, closing connection." );
                 m_session.closeConnection();
             }
             else
             {
-                Log.d( LOG_TAG, getLogPrefix() + "ping" );
+                Log.d( LOG_TAG, getLogPrefix() + ": ping" );
                 m_session.sendData( Protocol.Ping.create() );
             }
         }
@@ -106,7 +106,7 @@ public class ChannelSession implements Session.Listener
             break;
 
             default:
-                Log.w( LOG_TAG, getLogPrefix() + "unexpected message " + messageID );
+                Log.w( LOG_TAG, getLogPrefix() + ": unexpected message " + messageID );
             break;
         }
     }
@@ -153,7 +153,6 @@ public class ChannelSession implements Session.Listener
         }
 
         m_sessionManager.addSession( this );
-
         // FIXME: check for possible message in the streamDefragger
     }
 
