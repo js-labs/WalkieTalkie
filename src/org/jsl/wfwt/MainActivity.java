@@ -57,6 +57,7 @@ public class MainActivity extends Activity
     private static final int DISCOVERY_STATE_RUN = 2;
 
     private int m_audioStream;
+    private int m_audioPrvVolume;
     private int m_audioMaxVolume;
     private int m_audioVolume;
 
@@ -417,6 +418,7 @@ public class MainActivity extends Activity
         /* set maximum volume by default */
         m_audioStream = AudioManager.STREAM_MUSIC;
         final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+        m_audioPrvVolume = audioManager.getStreamVolume( m_audioStream );
         m_audioMaxVolume = audioManager.getStreamMaxVolume( m_audioStream );
         m_audioVolume = m_audioMaxVolume;
         String str = sharedPreferences.getString( KEY_VOLUME, "" );
@@ -504,6 +506,11 @@ public class MainActivity extends Activity
 
         if (updates > 0)
             editor.apply();
+
+        /*** restore previous volume ***/
+
+        final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+        audioManager.setStreamVolume( m_audioStream, m_audioPrvVolume, 0 );
 
         /*** stop discovery ***/
 
