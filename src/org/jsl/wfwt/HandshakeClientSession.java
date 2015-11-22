@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HandshakeClientSession implements Session.Listener
 {
-    private static final String LOG_TAG = "HandshakeClientSession";
+    private static final String LOG_TAG = HandshakeClientSession.class.getName();
 
     private final Channel m_channel;
     private final String m_serviceName;

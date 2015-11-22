@@ -46,7 +46,9 @@ public class ChannelSession implements Session.Listener
 
     private volatile int m_totalBytesReceived;
     private int m_lastBytesReceived;
-    private int m_pingSent;
+    private int m_pingTimeouts;
+    private long m_pingSendTime;
+    private long m_ping;
 
     private String getLogPrefix()
     {
@@ -68,22 +70,21 @@ public class ChannelSession implements Session.Listener
          */
         if (m_lastBytesReceived == m_totalBytesReceived)
         {
-            if (++m_pingSent == 10)
+            if (++m_pingTimeouts == 10)
             {
                 Log.i( LOG_TAG, getLogPrefix() + ": connection timeout, closing connection." );
                 m_session.closeConnection();
-            }
-            else
-            {
-                Log.d( LOG_TAG, getLogPrefix() + ": ping" );
-                m_session.sendData( Protocol.Ping.create() );
             }
         }
         else
         {
             m_lastBytesReceived = m_totalBytesReceived;
-            m_pingSent = 0;
+            m_pingTimeouts = 0;
         }
+
+        Log.d( LOG_TAG, getLogPrefix() + ": ping" );
+        m_pingSendTime = System.currentTimeMillis();
+        m_session.sendData( Protocol.Ping.create() );
     }
 
     private void handleMessage( RetainableByteBuffer msg )
@@ -102,7 +103,12 @@ public class ChannelSession implements Session.Listener
             break;
 
             case Protocol.Pong.ID:
-                /* do nothing */
+                final long ping = (System.currentTimeMillis() - m_pingSendTime) / 2;
+                if (Math.abs(ping - m_ping) > 10)
+                {
+                    m_ping = ping;
+                    m_channel.setPing( m_serviceName, m_session, ping );
+                }
             break;
 
             default:
@@ -189,11 +195,6 @@ public class ChannelSession implements Session.Listener
         m_channel.removeSession( m_serviceName, m_session );
         m_sessionManager.removeSession( this );
         m_audioPlayer.stopAndWait();
-    }
-
-    public final int closeConnection()
-    {
-        return m_session.closeConnection();
     }
 
     public final int sendMessage( RetainableByteBuffer msg )

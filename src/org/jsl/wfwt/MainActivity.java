@@ -71,7 +71,7 @@ public class MainActivity extends Activity
     private Channel m_channel;
 
     /* We could handle a discovery state with m_discoveryListener only
-     * (m_discoveryListener ==null means the discovery is not started)
+     * (m_discoveryListener == null means the discovery is not started)
      * but it will not allow us to handle any problems in onCreate().
      */
     private ReentrantLock m_lock;
@@ -95,17 +95,18 @@ public class MainActivity extends Activity
     private static class ListViewAdapter extends ArrayAdapter<StationInfo>
     {
         private final LayoutInflater m_inflater;
+        private final StringBuilder m_stringBuilder;
         private StationInfo [] m_stationInfo;
 
         static class RowViewInfo
         {
             public final TextView textViewStationName;
-            public final TextView textViewStationAddr;
+            public final TextView textViewAddrAndPing;
 
-            public RowViewInfo( TextView textViewStationName, TextView textViewStationAddr )
+            public RowViewInfo( TextView textViewStationName, TextView textViewAddrAndPing )
             {
                 this.textViewStationName = textViewStationName;
-                this.textViewStationAddr = textViewStationAddr;
+                this.textViewAddrAndPing = textViewAddrAndPing;
             }
         }
 
@@ -113,6 +114,7 @@ public class MainActivity extends Activity
         {
             super( context, R.layout.list_view_row );
             m_inflater = (LayoutInflater) context.getSystemService( LAYOUT_INFLATER_SERVICE );
+            m_stringBuilder = new StringBuilder();
             m_stationInfo = new StationInfo[0];
         }
 
@@ -135,7 +137,7 @@ public class MainActivity extends Activity
             {
                 rowView = m_inflater.inflate( R.layout.list_view_row, null, true );
                 final TextView textViewStationName = (TextView) rowView.findViewById( R.id.textViewStationName );
-                final TextView textViewStationAddr = (TextView) rowView.findViewById( R.id.textViewStationAddr );
+                final TextView textViewStationAddr = (TextView) rowView.findViewById( R.id.textViewAddrAndPing );
                 rowViewInfo = new RowViewInfo( textViewStationName, textViewStationAddr );
                 rowView.setTag( rowViewInfo );
             }
@@ -143,7 +145,17 @@ public class MainActivity extends Activity
                 rowViewInfo = (RowViewInfo) rowView.getTag();
 
             rowViewInfo.textViewStationName.setText( m_stationInfo[position].name );
-            rowViewInfo.textViewStationAddr.setText( m_stationInfo[position].addr );
+
+            m_stringBuilder.setLength(0);
+            m_stringBuilder.append( m_stationInfo[position].addr.toString() );
+            final long ping = m_stationInfo[position].ping;
+            if (ping > 0)
+            {
+                m_stringBuilder.append( ", " );
+                m_stringBuilder.append( m_stationInfo[position].ping );
+                m_stringBuilder.append( " ms" );
+            }
+            rowViewInfo.textViewAddrAndPing.setText( m_stringBuilder.toString() );
 
             return rowView;
         }
@@ -571,7 +583,7 @@ public class MainActivity extends Activity
         /* Stop and wait all channels */
         final Phaser phaser = new Phaser();
         final int phase1 = phaser.register();
-        m_channel.stop(phaser);
+        m_channel.stop( phaser );
         final int phase2 = phaser.arrive();
         if (BuildConfig.DEBUG && (phase1 != phase2))
             throw new AssertionError();

@@ -22,10 +22,12 @@ public class StationInfo
 {
     public final String name;
     public final String addr;
+    public final long ping;
 
-    public StationInfo( String name, String addr )
+    public StationInfo( String name, String addr, long ping )
     {
         this.name = name;
         this.addr = addr;
+        this.ping = ping;
     }
 }

@@ -30,9 +30,7 @@ import org.jsl.collider.Collider;
 import org.jsl.collider.Session;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.LinkedHashMap;
+import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
 class Channel
@@ -47,6 +45,13 @@ class Channel
         public Connector connector;
         public Session session;
         public String stationName;
+        public long ping;
+    }
+
+    private static class SessionInfo
+    {
+        public String stationName;
+        public long ping;
     }
 
     private final String m_deviceID;
@@ -63,7 +68,7 @@ class Channel
 
     private final ReentrantLock m_lock;
     private final TreeMap<String, ServiceInfo> m_serviceInfo;
-    private final LinkedHashMap<Session, String> m_sessions;
+    private final LinkedHashMap<Session, SessionInfo> m_sessions;
     private ChannelAcceptor m_acceptor;
     private RegistrationListener m_registrationListener;
     private String m_serviceName;
@@ -449,19 +454,10 @@ class Channel
             {
                 if (!m_stop)
                 {
-                    if (m_sessions.containsKey(session))
-                    {
-                        /* should not happen */
-                        Log.e( LOG_TAG, m_name + ": internal error" );
-                        if (BuildConfig.DEBUG)
-                            throw new AssertionError();
-                    }
-                    else
-                    {
-                        m_sessions.put( session, null );
-                        return new HandshakeServerSession(
-                                m_audioFormat, m_stationName, Channel.this, session, m_sessionManager, m_timerQueue, m_pingInterval );
-                    }
+                    final SessionInfo sessionInfo = new SessionInfo();
+                    m_sessions.put( session, sessionInfo );
+                    return new HandshakeServerSession(
+                            m_audioFormat, m_stationName, Channel.this, session, m_sessionManager, m_timerQueue, m_pingInterval );
                 }
                 /* else channel is being stopped, just skip a new income connection. */
             }
@@ -579,10 +575,11 @@ class Channel
                             m_stop = false;
                             if (m_phaser != null)
                             {
-                                final int phase = m_phaser.arriveAndDeregister();
+                                final Phaser phaser = m_phaser;
+                                m_phaser = null;
+                                final int phase = phaser.arriveAndDeregister();
                                 if (BuildConfig.DEBUG && (phase != 0))
                                     throw new AssertionError();
-                                m_phaser = null;
                             }
                         }
                     }
@@ -671,30 +668,31 @@ class Channel
                 sessions++;
         }
 
-        for (Map.Entry<Session, String> e : m_sessions.entrySet())
+        for (Map.Entry<Session, SessionInfo> e : m_sessions.entrySet())
         {
-            if (e.getValue() != null)
+            if (e.getValue().stationName != null)
                 sessions++;
         }
 
         final StationInfo [] stationInfo = new StationInfo[sessions];
         int idx = 0;
-
         for (Map.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
-            if (e.getValue().stationName != null)
+            final ServiceInfo serviceInfo = e.getValue();
+            if (serviceInfo.stationName != null)
             {
                 stationInfo[idx++] = new StationInfo(
-                        e.getValue().stationName, e.getValue().session.getRemoteAddress().toString() );
+                        serviceInfo.stationName, serviceInfo.session.getRemoteAddress().toString(), serviceInfo.ping );
             }
         }
 
-        for (Map.Entry<Session, String> e : m_sessions.entrySet())
+        for (Map.Entry<Session, SessionInfo> e : m_sessions.entrySet())
         {
-            if (e.getValue() != null)
+            final SessionInfo sessionInfo = e.getValue();
+            if (sessionInfo.stationName != null)
             {
                 stationInfo[idx++] = new StationInfo(
-                        e.getValue(), e.getKey().getRemoteAddress().toString() );
+                        sessionInfo.stationName, e.getKey().getRemoteAddress().toString(), sessionInfo.ping );
             }
         }
 
@@ -726,7 +724,7 @@ class Channel
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
         m_serviceInfo = new TreeMap<String, ServiceInfo>();
-        m_sessions = new LinkedHashMap<Session, String>();
+        m_sessions = new LinkedHashMap<Session, SessionInfo>();
         m_lock = new ReentrantLock();
 
         m_acceptor = new ChannelAcceptor();
@@ -846,11 +844,12 @@ class Channel
         m_lock.lock();
         try
         {
-            if (m_sessions.containsKey(session))
+            final SessionInfo sessionInfo = m_sessions.get( session );
+            if (sessionInfo != null)
             {
-                if (m_sessions.get(session) == null)
+                if (sessionInfo.stationName == null)
                 {
-                    m_sessions.put( session, stationName );
+                    sessionInfo.stationName = stationName;
                     m_activity.onStationListChanged( getStationListLocked() );
                 }
                 else
@@ -881,9 +880,9 @@ class Channel
         m_lock.lock();
         try
         {
-            if (m_serviceInfo.containsKey(serviceName))
+            final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+            if (serviceInfo != null)
             {
-                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
                 serviceInfo.stationName = stationName;
                 m_activity.onStationListChanged( getStationListLocked() );
             }
@@ -900,6 +899,50 @@ class Channel
         }
     }
 
+    public void setPing( String serviceName, Session session, long ping )
+    {
+        m_lock.lock();
+        try
+        {
+            if (serviceName == null)
+            {
+                /* Session created with acceptor */
+                final SessionInfo sessionInfo = m_sessions.get( session );
+                if (sessionInfo != null)
+                {
+                    sessionInfo.ping = ping;
+                    m_activity.onStationListChanged( getStationListLocked() );
+                }
+                else
+                {
+                    Log.e( LOG_TAG, "internal error: session not found." );
+                    if (BuildConfig.DEBUG)
+                        throw new AssertionError();
+                }
+            }
+            else
+            {
+                /* session created with connector */
+                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+                if (serviceInfo != null)
+                {
+                    serviceInfo.ping = ping;
+                    m_activity.onStationListChanged( getStationListLocked() );
+                }
+                else
+                {
+                    Log.e( LOG_TAG, "internal error: service [" + serviceName + "] not found." );
+                    if (BuildConfig.DEBUG)
+                        throw new AssertionError();
+                }
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
     public void removeSession( String serviceName, Session session )
     {
         m_lock.lock();
@@ -908,17 +951,15 @@ class Channel
             if (serviceName == null)
             {
                 /* Session created with acceptor */
-                if (m_sessions.containsKey(session))
-                {
-                    m_sessions.remove( session );
-                    m_activity.onStationListChanged( getStationListLocked() );
-                }
-                else
+                final SessionInfo sessionInfo = m_sessions.remove( session );
+                if (sessionInfo == null)
                 {
                     Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
                 }
+                else
+                    m_activity.onStationListChanged( getStationListLocked() );
             }
             else
             {
@@ -937,6 +978,7 @@ class Channel
 
                     serviceInfo.session = null;
                     serviceInfo.stationName = null;
+                    serviceInfo.ping = 0;
                     m_activity.onStationListChanged( getStationListLocked() );
                 }
             }
@@ -962,13 +1004,9 @@ class Channel
         }
     }
 
-    public boolean isConnected()
-    {
-        return (m_acceptor != null);
-    }
-
     public void stop( Phaser phaser )
     {
+        /* Supposed to be called only from main looper thread */
         if (BuildConfig.DEBUG && (Looper.getMainLooper().getThread() != Thread.currentThread()))
             throw new AssertionError();
 
@@ -977,7 +1015,7 @@ class Channel
         {
             if (m_stop)
             {
-                /* Channel is being stopped. */
+                /* Channel is already being stopped, should not happen. */
                 if (BuildConfig.DEBUG && (m_phaser != null))
                     throw new AssertionError();
                 m_phaser = phaser;
