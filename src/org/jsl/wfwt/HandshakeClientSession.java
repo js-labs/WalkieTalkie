@@ -68,7 +68,7 @@ public class HandshakeClientSession implements Session.Listener
         m_channel = channel;
         m_serviceName = serviceName;
         m_session = session;
-        m_streamDefragger = ChannelSession.createStreamDefragger( session );
+        m_streamDefragger = ChannelSession.createStreamDefragger();
         m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
@@ -118,7 +118,13 @@ public class HandshakeClientSession implements Session.Listener
         if (msg == null)
         {
             /* HandshakeReply is fragmented, strange but can happen */
-            Log.i( LOG_TAG, getLogPrefix() + "fragmented HandshakeReply." );
+            Log.i( LOG_TAG, getLogPrefix() + "fragmented <HandshakeReply>." );
+        }
+        else if (msg == StreamDefragger.INVALID_HEADER)
+        {
+            Log.i( LOG_TAG, getLogPrefix() +
+                    "invalid <HandshakeReply> received, close connection." );
+            m_session.closeConnection();
         }
         else
         {
@@ -196,5 +202,6 @@ public class HandshakeClientSession implements Session.Listener
         }
 
         m_channel.removeSession( m_serviceName, m_session );
+        m_streamDefragger.close();
     }
 }

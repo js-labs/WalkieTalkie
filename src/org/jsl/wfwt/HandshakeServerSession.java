@@ -66,7 +66,7 @@ public class HandshakeServerSession implements Session.Listener
         m_stationName = stationName;
         m_channel = channel;
         m_session = session;
-        m_streamDefragger = ChannelSession.createStreamDefragger( session );
+        m_streamDefragger = ChannelSession.createStreamDefragger();
         m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
@@ -91,7 +91,8 @@ public class HandshakeServerSession implements Session.Listener
         else if (msg == StreamDefragger.INVALID_HEADER)
         {
             Log.i( LOG_TAG, getLogPrefix() +
-                    "invalid HandshakeRequest received, closing connection." );
+                    "invalid <HandshakeRequest> received, close connection." );
+            m_session.closeConnection();
         }
         else
         {
@@ -196,5 +197,6 @@ public class HandshakeServerSession implements Session.Listener
             }
         }
         m_channel.removeSession( null, m_session );
+        m_streamDefragger.close();
     }
 }

@@ -65,9 +65,6 @@ public class ChannelSession implements Session.Listener
 
     private void handlePingTimeout()
     {
-        /* Send a ping message
-         * only if we did not received any data for some time.
-         */
         if (m_lastBytesReceived == m_totalBytesReceived)
         {
             if (++m_pingTimeouts == 10)
@@ -117,7 +114,7 @@ public class ChannelSession implements Session.Listener
         }
     }
 
-    public static StreamDefragger createStreamDefragger( final Session session )
+    public static StreamDefragger createStreamDefragger()
     {
         return new StreamDefragger( Protocol.Message.HEADER_SIZE )
         {
@@ -168,8 +165,18 @@ public class ChannelSession implements Session.Listener
         RetainableByteBuffer msg = m_streamDefragger.getNext( data );
         while (msg != null)
         {
-            handleMessage( msg );
-            msg = m_streamDefragger.getNext();
+            if (msg == StreamDefragger.INVALID_HEADER)
+            {
+                Log.i( LOG_TAG, getLogPrefix() +
+                        "invalid message received, close connection." );
+                m_session.closeConnection();
+                break;
+            }
+            else
+            {
+                handleMessage( msg );
+                msg = m_streamDefragger.getNext();
+            }
         }
         s_totalBytesReceivedUpdater.addAndGet( this, bytesReceived );
     }
@@ -195,6 +202,7 @@ public class ChannelSession implements Session.Listener
         m_channel.removeSession( m_serviceName, m_session );
         m_sessionManager.removeSession( this );
         m_audioPlayer.stopAndWait();
+        m_streamDefragger.close();
     }
 
     public final int sendMessage( RetainableByteBuffer msg )
