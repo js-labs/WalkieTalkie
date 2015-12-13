@@ -43,7 +43,7 @@ public class Protocol
         /* message size (short, 2 bytes) + message type (short, 2 bytes) */
         public static final short HEADER_SIZE = (2 + 2);
 
-        public static ByteBuffer init( ByteBuffer byteBuffer, short size, short type )
+        protected static ByteBuffer init( ByteBuffer byteBuffer, short size, short type )
         {
             byteBuffer.putShort( size );
             byteBuffer.putShort( type );
@@ -82,7 +82,7 @@ public class Protocol
         public static ByteBuffer create( String audioFormat, String stationName ) throws CharacterCodingException
         {
             final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
-            final ByteBuffer audioFormatBB = encoder.encode(CharBuffer.wrap(audioFormat));
+            final ByteBuffer audioFormatBB = encoder.encode( CharBuffer.wrap(audioFormat) );
             final ByteBuffer stationNameBB = encoder.encode( CharBuffer.wrap(stationName) );
             final ByteBuffer msg = create( ID, (short) (2 + 2 + audioFormatBB.remaining() + 2 + stationNameBB.remaining()) );
             msg.putShort( VERSION );
