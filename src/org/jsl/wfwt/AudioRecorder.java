@@ -70,7 +70,7 @@ public class AudioRecorder implements Runnable
         m_bufferSize = bufferSize;
         if (repeat)
         {
-            m_audioPlayer = AudioPlayer.create( audioFormat, "Repeat" );
+            m_audioPlayer = null; //AudioPlayer.create( audioFormat, "Repeat" );
             m_list = new LinkedList<RetainableByteBuffer>();
         }
         else
@@ -151,7 +151,7 @@ public class AudioRecorder implements Runnable
                     byteBufferArray = byteBuffer.getNioByteBuffer().array();
                     position = 0;
 
-                    if (BuildConfig.DEBUG && (byteBuffer.position() != position))
+                    if (BuildConfig.DEBUG && (byteBuffer.position() != 0))
                         throw new AssertionError();
                 }
 
@@ -171,7 +171,7 @@ public class AudioRecorder implements Runnable
 
                     if (m_list != null)
                     {
-                        /* Audio player expects just an audion frame
+                        /* Audio player expects just an audio frame
                          * without message header.
                          */
                         m_list.add( Protocol.AudioFrame.getAudioData(msg) );
