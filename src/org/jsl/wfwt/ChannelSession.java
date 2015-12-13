@@ -52,7 +52,7 @@ public class ChannelSession implements Session.Listener
 
     private String getLogPrefix()
     {
-        return m_channel.getName() + " " + m_session.getRemoteAddress();
+        return m_channel.getName() + " " + m_session.getRemoteAddress() + ": ";
     }
 
     private class TimerHandler implements Runnable
@@ -69,7 +69,7 @@ public class ChannelSession implements Session.Listener
         {
             if (++m_pingTimeouts == 10)
             {
-                Log.i( LOG_TAG, getLogPrefix() + ": connection timeout, closing connection." );
+                Log.i( LOG_TAG, getLogPrefix() + "connection timeout, closing connection." );
                 m_session.closeConnection();
             }
         }
@@ -79,7 +79,7 @@ public class ChannelSession implements Session.Listener
             m_pingTimeouts = 0;
         }
 
-        Log.d( LOG_TAG, getLogPrefix() + ": ping" );
+        Log.d( LOG_TAG, getLogPrefix() + "ping" );
         m_pingSendTime = System.currentTimeMillis();
         m_session.sendData( Protocol.Ping.create() );
     }
@@ -109,7 +109,7 @@ public class ChannelSession implements Session.Listener
             break;
 
             default:
-                Log.w( LOG_TAG, getLogPrefix() + ": unexpected message " + messageID );
+                Log.w( LOG_TAG, getLogPrefix() + "unexpected message " + messageID );
             break;
         }
     }
@@ -183,7 +183,7 @@ public class ChannelSession implements Session.Listener
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + ": connection closed" );
+        Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
 
         if (m_timerHandler != null)
         {
