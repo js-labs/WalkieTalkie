@@ -128,11 +128,13 @@ public class MainActivity extends Activity
         {
             public final TextView textViewStationName;
             public final TextView textViewAddrAndPing;
+            public final StateView stateView;
 
-            public RowViewInfo( TextView textViewStationName, TextView textViewAddrAndPing )
+            public RowViewInfo( TextView textViewStationName, TextView textViewAddrAndPing, StateView stateView )
             {
                 this.textViewStationName = textViewStationName;
                 this.textViewAddrAndPing = textViewAddrAndPing;
+                this.stateView = stateView;
             }
         }
 
@@ -164,7 +166,8 @@ public class MainActivity extends Activity
                 rowView = m_inflater.inflate( R.layout.list_view_row, null, true );
                 final TextView textViewStationName = (TextView) rowView.findViewById( R.id.textViewStationName );
                 final TextView textViewStationAddr = (TextView) rowView.findViewById( R.id.textViewAddrAndPing );
-                rowViewInfo = new RowViewInfo( textViewStationName, textViewStationAddr );
+                final StateView stateView = (StateView) rowView.findViewById( R.id.stateView );
+                rowViewInfo = new RowViewInfo( textViewStationName, textViewStationAddr, stateView );
                 rowView.setTag( rowViewInfo );
             }
             else
@@ -173,7 +176,7 @@ public class MainActivity extends Activity
             rowViewInfo.textViewStationName.setText( m_stationInfo[position].name );
 
             m_stringBuilder.setLength(0);
-            m_stringBuilder.append( m_stationInfo[position].addr.toString() );
+            m_stringBuilder.append( m_stationInfo[position].addr );
             final long ping = m_stationInfo[position].ping;
             if (ping > 0)
             {
@@ -182,6 +185,7 @@ public class MainActivity extends Activity
                 m_stringBuilder.append( " ms" );
             }
             rowViewInfo.textViewAddrAndPing.setText( m_stringBuilder.toString() );
+            rowViewInfo.stateView.setState( m_stationInfo[position].state );
 
             return rowView;
         }

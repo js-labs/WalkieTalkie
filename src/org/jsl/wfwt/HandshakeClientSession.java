@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HandshakeClientSession implements Session.Listener
 {
-    private static final String LOG_TAG = HandshakeClientSession.class.getName();
+    private static final String LOG_TAG = HandshakeClientSession.class.getSimpleName();
 
     private final Channel m_channel;
     private final String m_serviceName;
@@ -135,7 +135,8 @@ public class HandshakeClientSession implements Session.Listener
                 {
                     final String audioFormat = Protocol.HandshakeReplyOk.getAudioFormat( msg );
                     final String stationName = Protocol.HandshakeReplyOk.getStationName( msg );
-                    final AudioPlayer audioPlayer = AudioPlayer.create( audioFormat, m_session.getRemoteAddress().toString() );
+                    final AudioPlayer audioPlayer = AudioPlayer.create(
+                            getLogPrefix(), audioFormat, m_channel, m_serviceName, m_session );
                     if (audioPlayer == null)
                     {
                         Log.w( LOG_TAG, getLogPrefix() +

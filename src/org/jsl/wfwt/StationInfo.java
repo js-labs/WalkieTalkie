@@ -22,12 +22,14 @@ public class StationInfo
 {
     public final String name;
     public final String addr;
+    public final int state;
     public final long ping;
 
-    public StationInfo( String name, String addr, long ping )
+    public StationInfo( String name, String addr, int state, long ping )
     {
         this.name = name;
         this.addr = addr;
+        this.state = state;
         this.ping = ping;
     }
 }

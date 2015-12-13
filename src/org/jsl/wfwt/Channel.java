@@ -45,12 +45,16 @@ class Channel
         public Connector connector;
         public Session session;
         public String stationName;
+        public String addr;
+        public int state;
         public long ping;
     }
 
     private static class SessionInfo
     {
         public String stationName;
+        public String addr;
+        public int state;
         public long ping;
     }
 
@@ -181,6 +185,8 @@ class Channel
                         else
                             Log.d( LOG_TAG, m_name + ": skip service " + entry.getKey() );
                     }
+
+                    m_activity.onStationListChanged( getStationListLocked() );
                     return;
                 }
                 acceptor = m_acceptor;
@@ -658,14 +664,26 @@ class Channel
     private StationInfo [] getStationListLocked()
     {
         /* Lock is supposed to be held by current thread. */
-        if (BuildConfig.DEBUG && !m_lock.isHeldByCurrentThread())
-            throw new AssertionError();
+        if (BuildConfig.DEBUG)
+        {
+            if (!m_lock.isHeldByCurrentThread())
+                throw new AssertionError();
+
+            if (m_stationName == null)
+                throw new AssertionError();
+        }
+        else if (m_stationName == null)
+            return new StationInfo[0];
 
         int sessions = 0;
         for (Map.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
-            if (e.getValue().stationName != null)
-                sessions++;
+            if (m_serviceName.compareTo(e.getKey()) > 0)
+            {
+                /* Take only services with station name (i.e received HandshakeReply) */
+                if (e.getValue().stationName != null)
+                    sessions++;
+            }
         }
 
         for (Map.Entry<Session, SessionInfo> e : m_sessions.entrySet())
@@ -678,11 +696,17 @@ class Channel
         int idx = 0;
         for (Map.Entry<String, ServiceInfo> e : m_serviceInfo.entrySet())
         {
-            final ServiceInfo serviceInfo = e.getValue();
-            if (serviceInfo.stationName != null)
+            if (m_serviceName.compareTo(e.getKey()) > 0)
             {
-                stationInfo[idx++] = new StationInfo(
-                        serviceInfo.stationName, serviceInfo.session.getRemoteAddress().toString(), serviceInfo.ping );
+                if (e.getValue().stationName != null)
+                {
+                    final ServiceInfo serviceInfo = e.getValue();
+                    stationInfo[idx++] = new StationInfo(
+                            serviceInfo.stationName,
+                            serviceInfo.addr,
+                            serviceInfo.state,
+                            serviceInfo.ping );
+                }
             }
         }
 
@@ -692,7 +716,10 @@ class Channel
             if (sessionInfo.stationName != null)
             {
                 stationInfo[idx++] = new StationInfo(
-                        sessionInfo.stationName, e.getKey().getRemoteAddress().toString(), sessionInfo.ping );
+                        sessionInfo.stationName,
+                        sessionInfo.addr,
+                        sessionInfo.state,
+                        sessionInfo.ping );
             }
         }
 
@@ -811,8 +838,10 @@ class Channel
                  */
                 Log.w( LOG_TAG, "Internal error: service was not registered: " + nsdServiceInfo );
             }
-            else
+            else if ((m_serviceName != null) &&
+                     (m_serviceName.compareTo(serviceName) > 0))
             {
+                /* Had to connect to the service */
                 if ((serviceInfo.resolveListener == null) &&
                     (serviceInfo.connector == null) &&
                     (serviceInfo.session == null))
@@ -828,6 +857,11 @@ class Channel
                     serviceInfo.ver = 0;
                     serviceInfo.nsdServiceInfo = null;
                 }
+            }
+            else
+            {
+                /* Remove it from the m_serviceInfo, but do not update activity view. */
+                m_serviceInfo.remove( serviceName );
             }
         }
         finally
@@ -850,6 +884,9 @@ class Channel
                 if (sessionInfo.stationName == null)
                 {
                     sessionInfo.stationName = stationName;
+                    sessionInfo.addr = session.getRemoteAddress().toString();
+                    sessionInfo.state = 0;
+                    sessionInfo.ping = 0;
                     m_activity.onStationListChanged( getStationListLocked() );
                 }
                 else
@@ -875,7 +912,7 @@ class Channel
     public void setStationName( String serviceName, String stationName )
     {
         /* Called by the client session channel
-         * when we received login reply with a server station name.
+         * when received handshake reply with a server station name.
          */
         m_lock.lock();
         try
@@ -884,6 +921,9 @@ class Channel
             if (serviceInfo != null)
             {
                 serviceInfo.stationName = stationName;
+                serviceInfo.addr = serviceInfo.session.getRemoteAddress().toString();
+                serviceInfo.state = 0;
+                serviceInfo.ping = 0;
                 m_activity.onStationListChanged( getStationListLocked() );
             }
             else
@@ -891,6 +931,44 @@ class Channel
                 Log.e( LOG_TAG, "internal error: service [" + serviceName + "] not found." );
                 if (BuildConfig.DEBUG)
                     throw new AssertionError();
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void setSessionState( String serviceName, Session session, int state )
+    {
+        m_lock.lock();
+        try
+        {
+            if (serviceName == null)
+            {
+                /* Session created with acceptor */
+                final SessionInfo sessionInfo = m_sessions.get( session );
+                if (sessionInfo != null)
+                {
+                    if (BuildConfig.DEBUG && (sessionInfo.state == state))
+                        throw new AssertionError();
+                    sessionInfo.state = state;
+                    m_activity.onStationListChanged( getStationListLocked() );
+                }
+                /* else session can be already closed and removed */
+            }
+            else
+            {
+                /* session created with connector */
+                final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+                if (serviceInfo != null)
+                {
+                    if (BuildConfig.DEBUG && (serviceInfo.state == state))
+                        throw new AssertionError();
+                    serviceInfo.state = state;
+                    m_activity.onStationListChanged( getStationListLocked() );
+                }
+                /* else session can be already closed and removed */
             }
         }
         finally
@@ -978,6 +1056,8 @@ class Channel
 
                     serviceInfo.session = null;
                     serviceInfo.stationName = null;
+                    serviceInfo.addr = null;
+                    serviceInfo.state = 0;
                     serviceInfo.ping = 0;
                     m_activity.onStationListChanged( getStationListLocked() );
                 }
