@@ -99,6 +99,7 @@ public class AudioRecorder implements Runnable
         android.os.Process.setThreadPriority( Process.THREAD_PRIORITY_URGENT_AUDIO );
         RetainableByteBuffer byteBuffer = m_byteBufferCache.get();
         byte [] byteBufferArray = byteBuffer.getNioByteBuffer().array();
+        int byteBufferArrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
         int frames = 0;
         try
         {
@@ -121,15 +122,15 @@ public class AudioRecorder implements Runnable
 
                         if (m_list != null)
                         {
-                            int msgs = 0;
+                            int replayedFrames = 0;
                             for (RetainableByteBuffer msg : m_list)
                             {
                                 m_audioPlayer.play( msg );
                                 msg.release();
-                                msgs++;
+                                replayedFrames++;
                             }
                             m_list.clear();
-                            Log.i( LOG_TAG, "Replayed " + msgs + " frames." );
+                            Log.i( LOG_TAG, "Replayed " + replayedFrames + " frames." );
                         }
 
                         Log.i( LOG_TAG, "Sent " + frames + " frames." );
@@ -149,9 +150,10 @@ public class AudioRecorder implements Runnable
                     byteBuffer.release();
                     byteBuffer = m_byteBufferCache.get();
                     byteBufferArray = byteBuffer.getNioByteBuffer().array();
+                    byteBufferArrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
                     position = 0;
 
-                    if (BuildConfig.DEBUG && (byteBuffer.position() != 0))
+                    if (BuildConfig.DEBUG && (byteBuffer.position() != position))
                         throw new AssertionError();
                 }
 
@@ -159,7 +161,8 @@ public class AudioRecorder implements Runnable
                 if (BuildConfig.DEBUG && (byteBuffer.remaining() < m_frameSize))
                     throw new AssertionError();
 
-                final int bytesReady = m_audioRecord.read( byteBufferArray, byteBuffer.position(), m_frameSize );
+                final int bytesReady = m_audioRecord.read(
+                        byteBufferArray, byteBufferArrayOffset+byteBuffer.position(), m_frameSize );
                 if (bytesReady == m_frameSize)
                 {
                     final int limit = position + Protocol.AudioFrame.getMessageSize( m_frameSize );
