@@ -219,6 +219,9 @@ public abstract class AudioPlayer
                     if (frames++ == 0)
                     {
                         m_audioTrack.play();
+                        /* Stupid,
+                         * but it does not play anything if stop() is not called.
+                         */
                         m_audioTrack.stop();
                     }
 
