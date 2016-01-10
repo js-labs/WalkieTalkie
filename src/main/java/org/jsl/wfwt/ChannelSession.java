@@ -79,7 +79,7 @@ public class ChannelSession implements Session.Listener
             m_pingTimeouts = 0;
         }
 
-        Log.d( LOG_TAG, getLogPrefix() + "ping" );
+        Log.v( LOG_TAG, getLogPrefix() + "ping" );
         m_pingSendTime = System.currentTimeMillis();
         m_session.sendData( Protocol.Ping.create() );
     }
