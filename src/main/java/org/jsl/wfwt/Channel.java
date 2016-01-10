@@ -1054,11 +1054,22 @@ class Channel
                     if (BuildConfig.DEBUG && (serviceInfo.session != session))
                         throw new AssertionError();
 
-                    serviceInfo.session = null;
-                    serviceInfo.stationName = null;
-                    serviceInfo.addr = null;
-                    serviceInfo.state = 0;
-                    serviceInfo.ping = 0;
+                    if (serviceInfo.nsdServiceInfo == null)
+                    {
+                        /* Service disappeared earlier,
+                         * now session is closed and we can forget it.
+                         */
+                        m_serviceInfo.remove( serviceName );
+                    }
+                    else
+                    {
+                        serviceInfo.session = null;
+                        serviceInfo.stationName = null;
+                        serviceInfo.addr = null;
+                        serviceInfo.state = 0;
+                        serviceInfo.ping = 0;
+                    }
+
                     m_activity.onStationListChanged( getStationListLocked() );
                 }
             }
