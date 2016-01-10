@@ -286,7 +286,7 @@ public abstract class AudioPlayer
                     final int minBufferSize = AudioTrack.getMinBufferSize(
                             sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT );
 
-                    int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 10);
+                    int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 4);
                     if (bufferSize < minBufferSize)
                         bufferSize = minBufferSize;
 
