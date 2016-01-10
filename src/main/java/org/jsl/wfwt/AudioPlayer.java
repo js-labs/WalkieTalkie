@@ -115,8 +115,12 @@ public abstract class AudioPlayer
             for (;;)
             {
                 final Node tail = m_tail;
-                if (BuildConfig.DEBUG && (tail != null) && (tail.next == null))
+
+                if (BuildConfig.DEBUG && (tail != null) && (tail.audioFrame == null))
+                {
+                    /* Already stopped?! */
                     throw new AssertionError();
+                }
 
                 if (s_tailUpdater.compareAndSet(this, tail, node))
                 {
