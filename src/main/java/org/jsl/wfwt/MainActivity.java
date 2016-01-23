@@ -24,8 +24,6 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
@@ -82,39 +80,14 @@ public class MainActivity extends Activity
     private Condition m_cond;
     private boolean m_stop;
 
-    private class ButtonTalkTouchListener implements View.OnTouchListener
+    private class ButtonTalkListener implements SwitchButton.StateListener
     {
-        /* The proper way to have a button turning background color to red
-         * when pressed would be to use a <selector> resource (StateListDrawable),
-         * but the idea was to keep the default button style for all states
-         * except pressed. Did not found acceptable way to do that, sad...
-         */
-        private final Button m_button;
-        private final Drawable m_defaultBackground;
-        private final Drawable m_pressedBackground;
-
-        public ButtonTalkTouchListener( Button button )
+        public void onStateChanged( boolean state )
         {
-            m_button = button;
-            m_defaultBackground = button.getBackground();
-            m_pressedBackground = new ColorDrawable( getResources().getColor(android.R.color.holo_red_dark) );
-        }
-
-        public boolean onTouch( View v, MotionEvent event )
-        {
-            if (event.getAction() == MotionEvent.ACTION_DOWN)
-            {
-                m_button.setBackground( m_pressedBackground );
+            if (state)
                 m_audioRecorder.startRecording();
-                return true;
-            }
-            else if (event.getAction() == MotionEvent.ACTION_UP)
-            {
+            else
                 m_audioRecorder.stopRecording();
-                m_button.setBackground( m_defaultBackground );
-                return true;
-            }
-            return false;
         }
     }
 
@@ -361,8 +334,8 @@ public class MainActivity extends Activity
 
         getWindow().addFlags( WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON );
 
-        final Button buttonTalk = (Button) findViewById( R.id.buttonTalk );
-        buttonTalk.setOnTouchListener( new ButtonTalkTouchListener(buttonTalk) );
+        final SwitchButton buttonTalk = (SwitchButton) findViewById( R.id.buttonTalk );
+        buttonTalk.setStateListener( new ButtonTalkListener() );
 
         m_lock = new ReentrantLock();
         m_cond = m_lock.newCondition();
