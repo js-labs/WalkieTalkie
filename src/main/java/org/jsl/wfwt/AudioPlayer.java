@@ -21,6 +21,7 @@ package org.jsl.wfwt;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import android.os.Process;
 import android.util.Log;
 import org.jsl.collider.RetainableByteBuffer;
 import org.jsl.collider.Session;
@@ -174,6 +175,7 @@ public abstract class AudioPlayer
 
         public void run()
         {
+            android.os.Process.setThreadPriority( Process.THREAD_PRIORITY_URGENT_AUDIO );
             Log.i( LOG_TAG, m_logPrefix + "run start" );
             for (;;)
             {
