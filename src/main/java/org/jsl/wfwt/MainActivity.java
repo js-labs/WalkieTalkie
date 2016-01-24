@@ -158,7 +158,7 @@ public class MainActivity extends Activity
                 m_stringBuilder.append( " ms" );
             }
             rowViewInfo.textViewAddrAndPing.setText( m_stringBuilder.toString() );
-            rowViewInfo.stateView.setState( m_stationInfo[position].state );
+            rowViewInfo.stateView.setIndicatorState( m_stationInfo[position].transmission );
 
             return rowView;
         }

@@ -77,10 +77,17 @@ public class StateView extends View
         m_paint[1].setColor( Color.GREEN );
     }
 
-    void setState( int state )
+    void setIndicatorState( int state )
     {
-        if (BuildConfig.DEBUG && (state >= m_paint.length))
+        if (state < m_paint.length)
+        {
+            if (m_state != state)
+            {
+                m_state = state;
+                invalidate();
+            }
+        }
+        else if (BuildConfig.DEBUG)
             throw new AssertionError();
-        m_state = state;
     }
 }
