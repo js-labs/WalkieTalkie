@@ -149,7 +149,7 @@ public class SwitchButton extends Button
                     return true;
 
                     case STATE_DRAGGING_RIGHT:
-                        if ((dx > 0.0) && (Math.abs(dx) > Math.abs(dy)))
+                        if ((dx > -0.2) && (Math.abs(dx) > Math.abs(dy)))
                         {
                             m_touchX = x;
                             m_touchY = y;
@@ -168,7 +168,7 @@ public class SwitchButton extends Button
                     return true;
 
                     case STATE_DRAGGING_LEFT:
-                        if ((dx < 0.0) && (Math.abs(dx) > Math.abs(dy)))
+                        if ((dx < 0.2) && (Math.abs(dx) > Math.abs(dy)))
                         {
                             m_touchX = x;
                             m_touchY = y;
