@@ -285,7 +285,7 @@ public class AudioRecorder implements Runnable
                  * also would be nice if frameSize will be an even number.
                  */
                 final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 2) & (Integer.MAX_VALUE - 1);
-                int bufferSize = (frameSize * 10);
+                int bufferSize = (frameSize * 4);
                 if (bufferSize < minBufferSize)
                     bufferSize = minBufferSize;
 
