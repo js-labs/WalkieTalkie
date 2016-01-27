@@ -71,7 +71,7 @@ public class AudioRecorder implements Runnable
         if (repeat)
         {
             m_audioPlayer = null; //AudioPlayer.create( audioFormat, "Repeat" );
-            m_list = new LinkedList<>();
+            m_list = new LinkedList<RetainableByteBuffer>();
         }
         else
         {
