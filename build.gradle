@@ -14,12 +14,6 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 16
     buildToolsVersion '23.0.2'
-
-    defaultConfig {
-        applicationId "org.jsl.wfwt"
-        versionCode 5
-        versionName "1.4"
-    }
 }
 
 repositories {
