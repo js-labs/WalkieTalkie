@@ -32,9 +32,9 @@ public class Protocol
     private static final short MSG_HANDSHAKE_REQUEST    = 0x0001;
     private static final short MSG_HANDSHAKE_REPLY_OK   = 0x0002;
     private static final short MSG_HANDSHAKE_REPLY_FAIL = 0x0003;
-    private static final short MSG_AUDIO_FRAME          = 0x0003;
-    private static final short MSG_PING                 = 0x0004;
-    private static final short MSG_PONG                 = 0x0005;
+    private static final short MSG_AUDIO_FRAME          = 0x0004;
+    private static final short MSG_PING                 = 0x0005;
+    private static final short MSG_PONG                 = 0x0006;
 
     public static final byte VERSION = 1;
 
