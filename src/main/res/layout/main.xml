@@ -17,6 +17,7 @@
     <org.jsl.wfwt.SwitchButton
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
+            android:enabled="false"
             android:text="@string/push_to_talk"
             android:id="@+id/buttonTalk"
             android:layout_gravity="center_horizontal"

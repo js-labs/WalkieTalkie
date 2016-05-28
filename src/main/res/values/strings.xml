@@ -12,11 +12,13 @@
         <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
         for further details.
     </string>
-    <string name="app_name">Walkie Talkie</string>
+    <string name="app_name">WiFi Walkie Talkie</string>
     <string name="cancel">Cancel</string>
     <string name="close">Close</string>
+    <string name="exit">Exit</string>
     <string name="network_initialization_failed">Network initialization failed</string>
     <string name="nsd_not_found">NSD service not found</string>
+    <string name="running">Running</string>
     <string name="set">Set</string>
     <string name="settings">Settings</string>
     <string name="station_name">Station name</string>

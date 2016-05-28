@@ -18,67 +18,36 @@
  */
 package org.jsl.wfwt;
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Context;
-import android.content.DialogInterface;
-import android.content.SharedPreferences;
+import android.app.*;
+import android.content.*;
 import android.graphics.Color;
 import android.media.AudioManager;
-import android.net.nsd.NsdManager;
-import android.net.nsd.NsdServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
+import android.os.IBinder;
 import android.text.method.LinkMovementMethod;
-import android.util.Base64;
 import android.util.Log;
 import android.view.*;
 import android.widget.*;
-import org.jsl.collider.Collider;
-import org.jsl.collider.TimerQueue;
 
-import java.io.IOException;
-import java.math.BigInteger;
-import java.util.Random;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
-
-public class MainActivity extends Activity
+public class MainActivity extends Activity implements WalkieService.StateListener, Channel.StateListener
 {
-    public static final String SERVICE_TYPE = "_wfwt._tcp"; /* WiFi Walkie Talkie */
-    public static final String SERVICE_NAME = "Channel_00";
-    public static final String SERVICE_NAME_SEPARATOR = ":";
-    public static final String KEY_STATION_NAME = "station_name";
-    public static final String KEY_VOLUME = "volume";
     private static final String LOG_TAG = "MainActivity";
 
-    private static final int DISCOVERY_STATE_START = 1;
-    private static final int DISCOVERY_STATE_RUN = 2;
+    public static final int AUDIO_STREAM = AudioManager.STREAM_MUSIC;
+    public static final String KEY_STATION_NAME = "station_name";
+    public static final String KEY_VOLUME = "volume";
 
-    private int m_audioStream;
-    private int m_audioPrvVolume;
-    private int m_audioMaxVolume;
+    private boolean m_exit;
+    private Intent m_serviceIntent;
+    private ServiceConnection m_serviceConnection;
+    private WalkieService.BinderImpl m_binder;
+    private AudioRecorder m_audioRecorder;
+
+    private String m_stationName;
     private int m_audioVolume;
 
     private ListViewAdapter m_listViewAdapter;
-
-    private AudioRecorder m_audioRecorder;
-    private String m_stationName;
-    private NsdManager m_nsdManager;
-    private Collider m_collider;
-    private Thread m_colliderThread;
-    private Channel m_channel;
-
-    /* We could handle a discovery state with m_discoveryListener only
-     * (m_discoveryListener == null means the discovery is not started)
-     * but it will not allow us to handle any problems in onCreate().
-     */
-    private ReentrantLock m_lock;
-    private DiscoveryListener m_discoveryListener;
-    private int m_discoveryState;
-    private Condition m_cond;
-    private boolean m_stop;
 
     private class ButtonTalkListener implements SwitchButton.StateListener
     {
@@ -97,7 +66,7 @@ public class MainActivity extends Activity
         private final StringBuilder m_stringBuilder;
         private StationInfo [] m_stationInfo;
 
-        static class RowViewInfo
+        private static class RowViewInfo
         {
             public final TextView textViewStationName;
             public final TextView textViewAddrAndPing;
@@ -169,9 +138,7 @@ public class MainActivity extends Activity
         private final EditText m_editTextStationName;
         private final SeekBar m_seekBarVolume;
 
-        public SettingsDialogClickListener(
-                EditText editTextStationName,
-                SeekBar seekBarVolume )
+        public SettingsDialogClickListener( EditText editTextStationName, SeekBar seekBarVolume )
         {
             m_editTextStationName = editTextStationName;
             m_seekBarVolume = seekBarVolume;
@@ -179,166 +146,95 @@ public class MainActivity extends Activity
 
         public void onClick( DialogInterface dialog, int which )
         {
-            m_stationName = m_editTextStationName.getText().toString();
-            final String title = getString(R.string.app_name) + " : " + m_stationName;
-            setTitle( title );
-            m_audioVolume = m_seekBarVolume.getProgress();
-            Log.i( LOG_TAG, "audioVolume=" + m_audioVolume );
+            final String stationName = m_editTextStationName.getText().toString();
+            final int audioVolume = m_seekBarVolume.getProgress();
+
+            final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+            SharedPreferences.Editor editor = null;
+
+            if (m_stationName.compareTo(stationName) != 0)
+            {
+                final String title = getString(R.string.app_name) + ": " + stationName;
+                setTitle( title );
+
+                editor = sharedPreferences.edit();
+                editor.putString( KEY_STATION_NAME, stationName );
+                m_binder.setStationName( stationName );
+                m_stationName = stationName;
+            }
+
+            if (audioVolume != m_audioVolume)
+            {
+                if (editor == null)
+                    editor = sharedPreferences.edit();
+                editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
+                m_binder.setAudioVolume( audioVolume );
+                m_audioVolume = audioVolume;
+            }
+
+            if (editor != null)
+                editor.apply();
+
+            Log.i( LOG_TAG, "stationName=[" + stationName + "] audioVolume=" + m_audioVolume );
         }
     }
 
-    private class DiscoveryListener implements NsdManager.DiscoveryListener
+    /* WalkieService.StateListener interface implementation */
+
+    public void onInit( final AudioRecorder audioRecorder )
     {
-        public void onStartDiscoveryFailed( String serviceType, int errorCode )
+        Log.d( LOG_TAG, "onInit" );
+        if (audioRecorder != null)
         {
-            Log.e( LOG_TAG, "Start discovery failed: " + errorCode );
-            m_lock.lock();
-            try
-            {
-                m_discoveryState = 0;
-                m_cond.signal();
-            }
-            finally
-            {
-                m_lock.unlock();
-            }
-        }
-
-        public void onStopDiscoveryFailed( String serviceType, int errorCode )
-        {
-            Log.e( LOG_TAG, "Stop discovery failed: " + errorCode );
-        }
-
-        public void onDiscoveryStarted( String serviceType )
-        {
-            Log.i( LOG_TAG, "Discovery started" );
-            m_lock.lock();
-            try
-            {
-                if (m_stop)
-                    m_nsdManager.stopServiceDiscovery( this );
-                else
-                    m_discoveryState = DISCOVERY_STATE_RUN;
-            }
-            finally
-            {
-                m_lock.unlock();
-            }
-        }
-
-        public void onDiscoveryStopped( String serviceType )
-        {
-            Log.i( LOG_TAG, "Discovery stopped" );
-            m_lock.lock();
-            try
-            {
-                m_discoveryState = 0;
-                m_cond.signal();
-            }
-            finally
-            {
-                m_lock.unlock();
-            }
-        }
-
-        public void onServiceFound( NsdServiceInfo nsdServiceInfo )
-        {
-            try
-            {
-                final String [] ss = nsdServiceInfo.getServiceName().split( SERVICE_NAME_SEPARATOR );
-                final String channelName = new String( Base64.decode(ss[0], 0) );
-                Log.i( LOG_TAG, "service found: " + channelName + " [" + nsdServiceInfo + "]" );
-                if (channelName.compareTo(SERVICE_NAME) == 0)
-                    m_channel.onServiceFound( nsdServiceInfo );
-            }
-            catch (final IllegalArgumentException ex)
-            {
-                /* Base64.decode() can throw an exception,
-                 * will be better to handle it.
-                 */
-                Log.w( LOG_TAG, ex.toString() );
-            }
-        }
-
-        public void onServiceLost( NsdServiceInfo nsdServiceInfo )
-        {
-            try
-            {
-                final String [] ss = nsdServiceInfo.getServiceName().split( SERVICE_NAME_SEPARATOR );
-                final String channelName = new String( Base64.decode(ss[0], 0) );
-                Log.i( LOG_TAG, "service lost: " + channelName + " [" + nsdServiceInfo + "]" );
-                if (channelName.compareTo(SERVICE_NAME) == 0)
-                    m_channel.onServiceLost( nsdServiceInfo );
-            }
-            catch (final IllegalArgumentException ex)
-            {
-                /* Base64.decode() can throw an exception, will be better to handle it. */
-                Log.w( LOG_TAG, ex.toString() );
-            }
+            runOnUiThread( new Runnable() {
+                public void run() {
+                    m_audioRecorder = audioRecorder;
+                    final SwitchButton buttonTalk = (SwitchButton) findViewById( R.id.buttonTalk );
+                    buttonTalk.setStateListener( new ButtonTalkListener() );
+                    buttonTalk.setEnabled( true );
+                }
+            } );
         }
     }
 
-    private class ColliderThread extends Thread
-    {
-        public ColliderThread()
-        {
-            super( "ColliderThread" );
-        }
+    /* Channel.StateListener interface implementation */
 
-        public void run()
-        {
-            Log.i( LOG_TAG, "Collider thread: start" );
-            m_collider.run();
-            Log.i( LOG_TAG, "Collider thread: done" );
-        }
+    public void onStateChanged( final String stateString, final boolean registered )
+    {
+        Log.d( LOG_TAG, "onStateChanged: " + stateString );
+        runOnUiThread( new Runnable() {
+            public void run() {
+                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
+                textView.setText( stateString );
+                textView.setTextColor( (registered ? Color.GREEN : Color.GRAY) );
+            }
+        });
     }
 
-    private String getDeviceID()
+    public void onStationListChanged( final StationInfo [] stationInfo )
     {
-        long deviceID = 0;
-        final String str = Settings.Secure.getString( getContentResolver(), Settings.Secure.ANDROID_ID );
-        if (str != null)
-        {
-            try
-            {
-                final BigInteger bi = new BigInteger( str, 16 );
-                deviceID = bi.longValue();
+        runOnUiThread( new Runnable() {
+            public void run() {
+                m_listViewAdapter.setStationInfo( stationInfo );
             }
-            catch (final NumberFormatException ex)
-            {
-                /* Nothing critical */
-                Log.i( LOG_TAG, ex.toString() );
-            }
-        }
-
-        if (deviceID == 0)
-        {
-            /* Let's use random number */
-            deviceID = new Random().nextLong();
-        }
-
-        final byte [] bb = new byte[Long.SIZE / Byte.SIZE];
-        for (int idx=(bb.length - 1); idx>=0; idx--)
-        {
-            bb[idx] = (byte) (deviceID & 0xFF);
-            deviceID >>= Byte.SIZE;
-        }
-
-        return Base64.encodeToString( bb, (Base64.NO_PADDING | Base64.NO_WRAP) );
+        } );
     }
 
     public void onCreate( Bundle savedInstanceState )
     {
         super.onCreate( savedInstanceState );
-        setContentView( R.layout.main );
+        Log.d( LOG_TAG, "onCreate" );
 
         getWindow().addFlags( WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON );
 
-        final SwitchButton buttonTalk = (SwitchButton) findViewById( R.id.buttonTalk );
-        buttonTalk.setStateListener( new ButtonTalkListener() );
+        setContentView( R.layout.main );
 
-        m_lock = new ReentrantLock();
-        m_cond = m_lock.newCondition();
+        m_listViewAdapter = new ListViewAdapter( this );
+        final ListView listView = (ListView) findViewById( R.id.listView );
+        listView.setAdapter( m_listViewAdapter );
+
+        final TextView textView = (TextView) findViewById( R.id.textViewStatus );
+        textView.setTextColor( Color.GREEN );
     }
 
     public boolean onCreateOptionsMenu( Menu menu )
@@ -358,8 +254,13 @@ public class MainActivity extends Activity
                 final View dialogView = layoutInflater.inflate( R.layout.dialog_settings, null );
                 final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
+
+                final int audioStream = MainActivity.AUDIO_STREAM;
+                final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+                final int audioMaxVolume = audioManager.getStreamMaxVolume( audioStream );
+
                 editText.setText( m_stationName );
-                seekBar.setMax( m_audioMaxVolume );
+                seekBar.setMax( audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
@@ -383,6 +284,11 @@ public class MainActivity extends Activity
                 dialog.show();
             }
             break;
+
+            case R.id.actionExit:
+                m_exit = true;
+                finish();
+            break;
         }
         return super.onOptionsItemSelected( item );
     }
@@ -392,52 +298,25 @@ public class MainActivity extends Activity
         super.onResume();
         Log.i( LOG_TAG, "onResume" );
 
-        final String deviceID = getDeviceID();
+        final NotificationManager notificationManager = (NotificationManager) getSystemService( NOTIFICATION_SERVICE );
+        notificationManager.cancelAll();
 
-        m_listViewAdapter = new ListViewAdapter( this );
-        final ListView listView = (ListView) findViewById( R.id.listView );
-        listView.setAdapter( m_listViewAdapter );
-
-        try
-        {
-            m_collider = Collider.create();
-        }
-        catch (final IOException ex)
-        {
-            Log.e( LOG_TAG, ex.toString() );
-
-            final AlertDialog.Builder builder = new AlertDialog.Builder( this );
-            builder.setTitle( getString(R.string.system_error) );
-            builder.setMessage( getString(R.string.network_initialization_failed) );
-            builder.setPositiveButton( getString(R.string.close), null );
-            final AlertDialog alertDialog = builder.create();
-            alertDialog.show();
-            finish();
-            return;
-        }
-
-        final SessionManager sessionManager = new SessionManager();
-        m_audioRecorder = AudioRecorder.create( sessionManager, /*repeat*/false );
+        m_exit = false;
+        m_listViewAdapter.clear();
 
         final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
-        m_stationName = sharedPreferences.getString( KEY_STATION_NAME, "" );
+        m_stationName = sharedPreferences.getString( KEY_STATION_NAME, null );
         if ((m_stationName == null) || m_stationName.isEmpty())
             m_stationName = Build.MODEL;
 
         if (!m_stationName.isEmpty())
         {
-            final String title = getString(R.string.app_name) + " : " + m_stationName;
+            final String title = getString(R.string.app_name) + ": " + m_stationName;
             setTitle( title );
         }
 
-        /* set maximum volume by default */
-        m_audioStream = AudioManager.STREAM_MUSIC;
-        final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-        m_audioPrvVolume = audioManager.getStreamVolume( m_audioStream );
-        m_audioMaxVolume = audioManager.getStreamMaxVolume( m_audioStream );
-        m_audioVolume = m_audioMaxVolume;
-        String str = sharedPreferences.getString( KEY_VOLUME, "" );
-        if (!str.isEmpty())
+        String str = sharedPreferences.getString( KEY_VOLUME, null );
+        if ((str == null) || !str.isEmpty())
         {
             try
             {
@@ -445,52 +324,36 @@ public class MainActivity extends Activity
             }
             catch (final NumberFormatException ex)
             {
-                m_audioVolume = audioManager.getStreamMaxVolume( m_audioStream );
+                m_audioVolume = -1;
             }
         }
-        audioManager.setStreamVolume( m_audioStream, m_audioVolume, 0 );
 
-        m_nsdManager = (NsdManager) getSystemService( NSD_SERVICE );
-        if (m_nsdManager == null)
+        m_serviceIntent = new Intent( this, WalkieService.class );
+        m_serviceIntent.putExtra( KEY_STATION_NAME, m_stationName );
+        m_serviceIntent.putExtra( KEY_VOLUME, m_audioVolume );
+        final ComponentName componentName = startService( m_serviceIntent );
+
+        m_serviceConnection = new ServiceConnection()
         {
-            final AlertDialog.Builder builder = new AlertDialog.Builder( this );
-            builder.setTitle( getString( R.string.system_error ) );
-            builder.setMessage( getString(R.string.nsd_not_found) );
-            builder.setPositiveButton( getString(R.string.close), null );
-            final AlertDialog alertDialog = builder.create();
-            alertDialog.show();
-            finish();
-            return;
-        }
+            public void onServiceConnected( ComponentName name, IBinder binder )
+            {
+                Log.d( LOG_TAG, "onServiceConnected" );
+                m_binder = (WalkieService.BinderImpl) binder;
+                m_binder.setStateListener(
+                        /*WalkieService.StateListener*/ MainActivity.this,
+                        /*Channel.StateListener*/ MainActivity.this );
+            }
 
-        final TimerQueue timerQueue = new TimerQueue( m_collider.getThreadPool() );
-        m_colliderThread = new ColliderThread();
-        m_colliderThread.start();
+            public void onServiceDisconnected( ComponentName name )
+            {
+                Log.d( LOG_TAG, "onServiceDisconnected" );
+            }
+        };
 
-        /* Show the channel name with gray color at start,
-         * and change color to green after registration.
-         */
-        final TextView textView = (TextView) findViewById( R.id.textViewStatus );
-        textView.setText( SERVICE_NAME );
-        textView.setTextColor( Color.GRAY );
-
-        m_channel = new Channel(
-                deviceID,
-                m_stationName,
-                m_audioRecorder.getAudioFormat(),
-                this,
-                m_collider,
-                m_nsdManager,
-                SERVICE_TYPE,
-                SERVICE_NAME,
-                sessionManager,
-                timerQueue,
-                Config.PING_INTERVAL );
-
-        m_stop = false;
-        m_discoveryState = DISCOVERY_STATE_START;
-        m_discoveryListener = new DiscoveryListener();
-        m_nsdManager.discoverServices( SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, m_discoveryListener );
+        final boolean bindRC = bindService( m_serviceIntent, m_serviceConnection, Context.BIND_AUTO_CREATE );
+        if (!bindRC)
+            m_serviceConnection = null;
+        Log.d( LOG_TAG, "componentName=" + componentName + " bindRC=" + bindRC );
     }
 
     public void onPause()
@@ -498,164 +361,41 @@ public class MainActivity extends Activity
         super.onPause();
         Log.i( LOG_TAG, "onPause" );
 
-        /*** persist settings ***/
-
-        final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
-        final SharedPreferences.Editor editor = sharedPreferences.edit();
-        int updates = 0;
-
-        String str = sharedPreferences.getString( KEY_STATION_NAME, "" );
-        if (m_stationName.compareTo(str) != 0)
+        if (m_serviceConnection != null)
         {
-            editor.putString( KEY_STATION_NAME, m_stationName );
-            updates++;
+            unbindService( m_serviceConnection );
+            m_serviceConnection = null;
         }
 
-        str = sharedPreferences.getString( KEY_VOLUME, "" );
-        final String strVolume = Integer.toString( m_audioVolume );
-        if (str.compareTo(strVolume) != 0)
+        if (m_serviceIntent != null)
         {
-            editor.putString( KEY_VOLUME, strVolume );
-            updates++;
-        }
-
-        if (updates > 0)
-            editor.apply();
-
-        /*** restore previous volume ***/
-
-        final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-        audioManager.setStreamVolume( m_audioStream, m_audioPrvVolume, 0 );
-
-        /*** stop discovery ***/
-
-        boolean stopDiscovery = false;
-        m_lock.lock();
-        try
-        {
-            m_stop = true;
-            if (m_discoveryState == DISCOVERY_STATE_START)
-            {
-                /* Can wait right now. */
-                while (m_discoveryState != 0)
-                    m_cond.await();
-            }
-            else if (m_discoveryState == DISCOVERY_STATE_RUN)
-            {
-                stopDiscovery = true;
-            }
+            if (m_exit)
+                stopService( m_serviceIntent );
             else
             {
-                if (BuildConfig.DEBUG)
-                    throw new AssertionError();
+                final Intent intent = new Intent( this, MainActivity.class );
+                final PendingIntent pendingIntent = PendingIntent.getActivity( this, (int) System.currentTimeMillis(), intent, 0 );
+                final Notification.Builder notificationBuilder = new Notification.Builder( this );
+                notificationBuilder.setContentTitle( getString(R.string.app_name) );
+                notificationBuilder.setContentText( getString(R.string.running) );
+                notificationBuilder.setContentIntent( pendingIntent );
+                notificationBuilder.setSmallIcon( android.R.drawable.ic_input_add );
+
+                final Notification notification = notificationBuilder.build();
+                notification.flags |= Notification.FLAG_AUTO_CANCEL;
+
+                final NotificationManager notificationManager = (NotificationManager) getSystemService( NOTIFICATION_SERVICE );
+                notificationManager.notify( 0, notification );
             }
-        }
-        catch (final InterruptedException ex)
-        {
-            Log.e( LOG_TAG, ex.toString() );
-            Thread.currentThread().interrupt();
-        }
-        finally
-        {
-            m_lock.unlock();
-        }
-
-        Log.i( LOG_TAG, "onPause: 1" );
-
-        if (stopDiscovery)
-        {
-            m_nsdManager.stopServiceDiscovery( m_discoveryListener );
-            m_lock.lock();
-            try
-            {
-                while (m_discoveryState != 0)
-                    m_cond.await();
-            }
-            catch (final InterruptedException ex)
-            {
-                Log.e( LOG_TAG, ex.toString() );
-            }
-            finally
-            {
-                m_lock.unlock();
-            }
-        }
-
-        Log.i( LOG_TAG, "onPause: 2" );
-
-        /* Stop and wait all channels */
-        final Phaser phaser = new Phaser();
-        final int phase1 = phaser.register();
-        m_channel.stop( phaser );
-        final int phase2 = phaser.arrive();
-        if (BuildConfig.DEBUG && (phase1 != phase2))
-            throw new AssertionError();
-        phaser.awaitAdvance( phase2 );
-
-        if (m_colliderThread != null)
-        {
-            m_collider.stop();
-            try
-            {
-                m_colliderThread.join();
-            }
-            catch (final InterruptedException ex)
-            {
-                Log.e( LOG_TAG, ex.toString() );
-                Thread.currentThread().interrupt();
-            }
-            m_colliderThread = null;
-            m_collider = null;
-        }
-
-        Log.i( LOG_TAG, "onPause: 3" );
-
-        if (m_audioRecorder != null)
-        {
-            m_audioRecorder.shutdown();
-            m_audioRecorder = null;
+            m_serviceIntent = null;
         }
 
         Log.i( LOG_TAG, "onPause: done" );
     }
 
-    public void onChannelStarted( final String channelName, final int portNumber )
+    public void onDestroy()
     {
-        runOnUiThread( new Runnable() {
-            public void run()
-            {
-                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
-                final StringBuilder sb = new StringBuilder();
-                sb.append( channelName );
-                sb.append( getString(R.string._colon) );
-                sb.append( Integer.toString(portNumber) );
-                textView.setText( sb.toString() );
-            }
-        });
-    }
-
-    public void onChannelRegistered( final String serviceName )
-    {
-        runOnUiThread( new Runnable() {
-            public void run()
-            {
-                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
-                String str = textView.getText().toString();
-                str += "\n";
-                str += serviceName;
-                textView.setText( str );
-                textView.setTextColor( Color.GREEN );
-            }
-        });
-    }
-
-    public void onStationListChanged( final StationInfo [] stationInfo )
-    {
-        runOnUiThread( new Runnable() {
-            public void run()
-            {
-                m_listViewAdapter.setStationInfo( stationInfo );
-            }
-        } );
+        Log.i( LOG_TAG, "onDestroy" );
+        super.onDestroy();
     }
 }
