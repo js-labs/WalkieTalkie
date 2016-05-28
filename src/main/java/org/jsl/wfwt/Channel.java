@@ -29,6 +29,8 @@ import org.jsl.collider.Collider;
 import org.jsl.collider.Session;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.ReentrantLock;
@@ -779,23 +781,18 @@ class Channel
             final SessionInfo sessionInfo = m_sessions.get( session );
             if (sessionInfo != null)
             {
-                if (sessionInfo.stationName == null)
+                final String str = sessionInfo.stationName;
+                sessionInfo.stationName = stationName;
+                if (str == null)
                 {
-                    sessionInfo.stationName = stationName;
                     sessionInfo.addr = session.getRemoteAddress().toString();
                     sessionInfo.state = 0;
                     sessionInfo.ping = 0;
+                }
 
-                    final StateListener stateListener = m_stateListener;
-                    if (stateListener != null)
-                        stateListener.onStationListChanged( getStationListLocked() );
-                }
-                else
-                {
-                    Log.e( LOG_TAG, m_name + ": internal error: session already has a station name" );
-                    if (BuildConfig.DEBUG)
-                        throw new AssertionError();
-                }
+                final StateListener stateListener = m_stateListener;
+                if (stateListener != null)
+                    stateListener.onStationListChanged( getStationListLocked() );
             }
             else
             {
@@ -812,7 +809,7 @@ class Channel
 
     public void setStationName( String serviceName, String stationName )
     {
-        /* Called by the client session channel
+        /* Called by the client session instance
          * when received handshake reply with a server station name.
          */
         m_lock.lock();
@@ -832,7 +829,7 @@ class Channel
             }
             else
             {
-                Log.e( LOG_TAG, "internal error: service [" + serviceName + "] not found." );
+                Log.e( LOG_TAG, m_name + ": internal error: service [" + serviceName + "] not found" );
                 if (BuildConfig.DEBUG)
                     throw new AssertionError();
             }
@@ -845,7 +842,32 @@ class Channel
 
     public void setStationName( String stationName )
     {
-        m_stationName = stationName;
+        m_lock.lock();
+        try
+        {
+            /* Broadcast new station name to all connected stations */
+            m_stationName = stationName;
+            final ByteBuffer msg = Protocol.StationName.create( stationName );
+
+            for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
+            {
+                final ServiceInfo serviceInfo = entry.getValue();
+                final Session session = serviceInfo.session;
+                if (session != null)
+                    session.sendData( msg.duplicate() );
+            }
+
+            for (Session session : m_sessions.keySet())
+                session.sendData( msg.duplicate() );
+        }
+        catch (CharacterCodingException ex)
+        {
+            Log.w( LOG_TAG, ex.toString() );
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
     }
 
     public void setSessionState( String serviceName, Session session, int state )

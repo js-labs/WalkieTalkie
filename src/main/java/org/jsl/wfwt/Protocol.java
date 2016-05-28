@@ -35,6 +35,7 @@ public class Protocol
     private static final short MSG_AUDIO_FRAME          = 0x0004;
     private static final short MSG_PING                 = 0x0005;
     private static final short MSG_PONG                 = 0x0006;
+    private static final short MSG_STATION_NAME         = 0x0007;
 
     public static final byte VERSION = 1;
 
@@ -321,5 +322,44 @@ public class Protocol
         {
             return s_msg.duplicate();
         }
+    }
+
+    public static class StationName extends Message
+    {
+        public static final short ID = MSG_STATION_NAME;
+
+        public static ByteBuffer create( String stationName ) throws CharacterCodingException
+        {
+            final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
+            final ByteBuffer stationNameBB = encoder.encode( CharBuffer.wrap(stationName) );
+            final short extSize = (short) ((Short.SIZE / Byte.SIZE) + stationNameBB.remaining());
+            final ByteBuffer msg = create( ID, extSize );
+            msg.putShort( (short) stationNameBB.remaining() );
+            msg.put( stationNameBB );
+            msg.rewind();
+            return msg;
+        }
+
+        public static String getStationName( RetainableByteBuffer msg ) throws CharacterCodingException
+        {
+            String ret = null;
+            final int pos = msg.position();
+            try
+            {
+                msg.position( pos + Message.HEADER_SIZE );
+                final short length = msg.getShort();
+                if (length > 0)
+                {
+                    final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
+                    ret = decoder.decode(msg.getNioByteBuffer()).toString();
+                }
+            }
+            finally
+            {
+                msg.position( pos );
+            }
+            return ret;
+        }
+
     }
 }

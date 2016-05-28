@@ -24,6 +24,7 @@ import org.jsl.collider.Session;
 import org.jsl.collider.StreamDefragger;
 import org.jsl.collider.TimerQueue;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
@@ -105,6 +106,24 @@ public class ChannelSession implements Session.Listener
                 {
                     m_ping = ping;
                     m_channel.setPing( m_serviceName, m_session, ping );
+                }
+            break;
+
+            case Protocol.StationName.ID:
+                try
+                {
+                    final String stationName = Protocol.StationName.getStationName( msg );
+                    if (stationName.length() > 0)
+                    {
+                        if (m_serviceName == null)
+                            m_channel.setStationName( m_session, stationName );
+                        else
+                            m_channel.setStationName( m_serviceName, stationName );
+                    }
+                }
+                catch (final CharacterCodingException ex)
+                {
+                    Log.w( LOG_TAG, ex.toString() );
                 }
             break;
 
