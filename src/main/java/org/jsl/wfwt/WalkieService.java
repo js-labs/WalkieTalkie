@@ -164,7 +164,7 @@ public class WalkieService extends Service
             {
                 final String[] ss = nsdServiceInfo.getServiceName().split( SERVICE_NAME_SEPARATOR );
                 final String channelName = new String( Base64.decode( ss[0], 0 ) );
-                Log.i( LOG_TAG, "service found: " + channelName + " [" + nsdServiceInfo + "]" );
+                Log.i( LOG_TAG, "onServiceFound: " + channelName + ": " + nsdServiceInfo );
                 if (channelName.compareTo( SERVICE_NAME ) == 0)
                     m_channel.onServiceFound( nsdServiceInfo );
             }

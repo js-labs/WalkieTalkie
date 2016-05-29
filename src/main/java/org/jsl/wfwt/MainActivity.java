@@ -20,6 +20,8 @@ package org.jsl.wfwt;
 
 import android.app.*;
 import android.content.*;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.media.AudioManager;
 import android.os.Build;
@@ -379,7 +381,10 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 notificationBuilder.setContentTitle( getString(R.string.app_name) );
                 notificationBuilder.setContentText( getString(R.string.running) );
                 notificationBuilder.setContentIntent( pendingIntent );
-                notificationBuilder.setSmallIcon( android.R.drawable.ic_input_add );
+                notificationBuilder.setSmallIcon( R.drawable.ic_status );
+
+                final Bitmap largeIcon = BitmapFactory.decodeResource( getResources(), R.drawable.ic_launcher );
+                notificationBuilder.setLargeIcon( largeIcon );
 
                 final Notification notification = notificationBuilder.build();
                 notification.flags |= Notification.FLAG_AUTO_CANCEL;

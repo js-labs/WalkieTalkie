@@ -317,18 +317,18 @@ class Channel
 
                     m_resolveListener = null;
 
-                    if (m_stopLatch != null)
-                    {
-                        m_serviceInfo.remove( m_serviceName );
-                        m_stopLatch.countDown();
-                    }
-                    else
+                    if (m_stopLatch == null)
                     {
                         final InetSocketAddress addr = new InetSocketAddress( nsdServiceInfo.getHost(), nsdServiceInfo.getPort() );
                         serviceInfo.connector = new ChannelConnector( addr, m_serviceName );
                         m_collider.addConnector( serviceInfo.connector );
 
                         resolveNextLocked( m_serviceName );
+                    }
+                    else
+                    {
+                        m_serviceInfo.remove( m_serviceName );
+                        m_stopLatch.countDown();
                     }
                 }
                 else
