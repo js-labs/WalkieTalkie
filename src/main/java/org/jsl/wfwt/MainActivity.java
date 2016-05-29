@@ -47,6 +47,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     private AudioRecorder m_audioRecorder;
 
     private String m_stationName;
+    private int m_audioMaxVolume;
     private int m_audioVolume;
 
     private ListViewAdapter m_listViewAdapter;
@@ -170,7 +171,12 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 if (editor == null)
                     editor = sharedPreferences.edit();
                 editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
-                m_binder.setAudioVolume( audioVolume );
+
+                final int audioStream = MainActivity.AUDIO_STREAM;
+                final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+                Log.d( LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")" );
+                audioManager.setStreamVolume( audioStream, audioVolume, 0 );
+
                 m_audioVolume = audioVolume;
             }
 
@@ -257,12 +263,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
 
-                final int audioStream = MainActivity.AUDIO_STREAM;
-                final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-                final int audioMaxVolume = audioManager.getStreamMaxVolume( audioStream );
-
                 editText.setText( m_stationName );
-                seekBar.setMax( audioMaxVolume );
+                seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
@@ -317,8 +319,14 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             setTitle( title );
         }
 
-        String str = sharedPreferences.getString( KEY_VOLUME, null );
-        if ((str == null) || !str.isEmpty())
+        final int audioStream = MainActivity.AUDIO_STREAM;
+        final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+        m_audioMaxVolume = audioManager.getStreamMaxVolume( audioStream );
+
+        final String str = sharedPreferences.getString( KEY_VOLUME, null );
+        if ((str == null) || str.isEmpty())
+            m_audioVolume = m_audioMaxVolume;
+        else
         {
             try
             {
@@ -326,7 +334,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             }
             catch (final NumberFormatException ex)
             {
-                m_audioVolume = -1;
+                m_audioVolume = m_audioMaxVolume;
             }
         }
 

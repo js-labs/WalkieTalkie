@@ -50,7 +50,6 @@ public class WalkieService extends Service
     private NsdManager m_nsdManager;
     private AudioRecorder m_audioRecorder;
     private int m_audioPrvVolume;
-    private int m_audioVolume;
 
     private final Binder m_binder;
     private final ReentrantLock m_lock;
@@ -78,12 +77,6 @@ public class WalkieService extends Service
         public void setStationName( String stationName )
         {
             m_channel.setStationName( stationName );
-        }
-
-        public void setAudioVolume( int volume )
-        {
-            if (volume >= 0)
-                m_audioVolume = volume;
         }
     }
 
@@ -270,15 +263,14 @@ public class WalkieService extends Service
             {
                 final int audioStream = MainActivity.AUDIO_STREAM;
                 final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-                final int audioMaxVolume = audioManager.getStreamMaxVolume( audioStream );
                 m_audioPrvVolume = audioManager.getStreamVolume( audioStream );
 
                 final String stationName = intent.getStringExtra( MainActivity.KEY_STATION_NAME );
-                m_audioVolume = intent.getIntExtra( MainActivity.KEY_VOLUME, -1 );
-                if (m_audioVolume < 0)
-                    m_audioVolume = audioMaxVolume;
-                Log.d( LOG_TAG, "setStreamVolume(" + audioStream + ", " + m_audioVolume + ")" );
-                audioManager.setStreamVolume( audioStream, m_audioVolume, 0 );
+                int audioVolume = intent.getIntExtra( MainActivity.KEY_VOLUME, -1 );
+                if (audioVolume < 0)
+                    audioVolume = audioManager.getStreamMaxVolume( audioStream );
+                Log.d( LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")" );
+                audioManager.setStreamVolume( audioStream, audioVolume, 0 );
 
                 try
                 {
