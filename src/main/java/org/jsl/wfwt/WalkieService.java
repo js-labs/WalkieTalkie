@@ -261,6 +261,8 @@ public class WalkieService extends Service
 
             if (m_audioRecorder != null)
             {
+                startForeground( 0, null );
+
                 final int audioStream = MainActivity.AUDIO_STREAM;
                 final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
                 m_audioPrvVolume = audioManager.getStreamVolume( audioStream );
