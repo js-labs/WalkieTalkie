@@ -301,7 +301,7 @@ public class WalkieService extends Service
                 }
             }
         }
-        return START_STICKY;
+        return START_REDELIVER_INTENT;
     }
 
     public void onDestroy()
