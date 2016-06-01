@@ -384,6 +384,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             else
             {
                 final Intent intent = new Intent( this, MainActivity.class );
+                intent.setFlags( Intent.FLAG_ACTIVITY_SINGLE_TOP );
                 final PendingIntent pendingIntent = PendingIntent.getActivity( this, (int) System.currentTimeMillis(), intent, 0 );
                 final Notification.Builder notificationBuilder = new Notification.Builder( this );
                 notificationBuilder.setContentTitle( getString(R.string.app_name) );
