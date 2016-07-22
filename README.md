@@ -9,7 +9,7 @@ no any configuration required. Unfortunately Android NSD
 implementation is not stable enough, so sometimes application
 can not establish connection properly. Application restart
 or device reboot usually helps. Audio data is being transmitted
-by the unicast channel, so each device works as a server and
+by the unicast channel (TCP/IP), so each device works as a server and
 as a client at the same time.
 
 Program was implemented as a demonstration of JS-Collider:
