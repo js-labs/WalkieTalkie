@@ -18,10 +18,15 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceMedium"
-            android:text="Volume"
+            android:text="@string/volume"
             android:id="@+id/textView2" android:padding="5dp"/>
     <SeekBar
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:id="@+id/seekBarVolume"/>
+    <CheckBox
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/check_wifi_status_on_start"
+            android:id="@+id/checkBoxCheckWiFiStatusOnStart" android:paddingTop="10dp" android:paddingBottom="10dp"/>
 </LinearLayout>

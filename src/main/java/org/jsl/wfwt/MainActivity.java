@@ -24,6 +24,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.media.AudioManager;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -39,6 +40,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     public static final int AUDIO_STREAM = AudioManager.STREAM_MUSIC;
     public static final String KEY_STATION_NAME = "station_name";
     public static final String KEY_VOLUME = "volume";
+    private static final String KEY_CHECK_WIFI_STATUS = "check-wifi-status";
 
     private boolean m_exit;
     private Intent m_serviceIntent;
@@ -140,11 +142,13 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     {
         private final EditText m_editTextStationName;
         private final SeekBar m_seekBarVolume;
+        private final CheckBox m_checkBox;
 
-        public SettingsDialogClickListener( EditText editTextStationName, SeekBar seekBarVolume )
+        public SettingsDialogClickListener( EditText editTextStationName, SeekBar seekBarVolume, CheckBox checkBox )
         {
             m_editTextStationName = editTextStationName;
             m_seekBarVolume = seekBarVolume;
+            m_checkBox = checkBox;
         }
 
         public void onClick( DialogInterface dialog, int which )
@@ -153,14 +157,13 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             final int audioVolume = m_seekBarVolume.getProgress();
 
             final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
-            SharedPreferences.Editor editor = null;
+            final SharedPreferences.Editor editor = sharedPreferences.edit();
 
             if (m_stationName.compareTo(stationName) != 0)
             {
                 final String title = getString(R.string.app_name) + ": " + stationName;
                 setTitle( title );
 
-                editor = sharedPreferences.edit();
                 editor.putString( KEY_STATION_NAME, stationName );
                 m_binder.setStationName( stationName );
                 m_stationName = stationName;
@@ -168,8 +171,6 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
             if (audioVolume != m_audioVolume)
             {
-                if (editor == null)
-                    editor = sharedPreferences.edit();
                 editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
 
                 final int audioStream = MainActivity.AUDIO_STREAM;
@@ -180,10 +181,12 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 m_audioVolume = audioVolume;
             }
 
-            if (editor != null)
-                editor.apply();
+            final boolean checkWiFiStatusOnStart = m_checkBox.isChecked();
+            editor.putBoolean( KEY_CHECK_WIFI_STATUS, checkWiFiStatusOnStart );
+            editor.apply();
 
-            Log.i( LOG_TAG, "stationName=[" + stationName + "] audioVolume=" + m_audioVolume );
+            Log.i( LOG_TAG, "stationName=[" + stationName + "] audioVolume=" + m_audioVolume +
+                    " checkWiFiStatusOnStart=" + checkWiFiStatusOnStart );
         }
     }
 
@@ -259,17 +262,20 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         {
             case R.id.actionSettings:
             {
+                final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
                 final View dialogView = layoutInflater.inflate( R.layout.dialog_settings, null );
                 final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
+                final CheckBox checkBox = (CheckBox) dialogView.findViewById( R.id.checkBoxCheckWiFiStatusOnStart );
 
                 editText.setText( m_stationName );
                 seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
+                checkBox.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, true) );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
                 dialogBuilder.setCancelable( true );
-                dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(editText, seekBar) );
+                dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(editText, seekBar, checkBox) );
                 dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
                 final AlertDialog dialog = dialogBuilder.create();
                 dialog.show();
@@ -360,10 +366,43 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             }
         };
 
-        final boolean bindRC = bindService( m_serviceIntent, m_serviceConnection, Context.BIND_AUTO_CREATE );
+        final boolean bindRC = bindService( m_serviceIntent, m_serviceConnection, BIND_AUTO_CREATE );
         if (!bindRC)
             m_serviceConnection = null;
         Log.d( LOG_TAG, "componentName=" + componentName + " bindRC=" + bindRC );
+
+        /*** Check WiFi status */
+
+        final boolean checkWiFiStatus = sharedPreferences.getBoolean( KEY_CHECK_WIFI_STATUS, true );
+        if (checkWiFiStatus)
+        {
+            final WifiManager manager = (WifiManager) getSystemService( WIFI_SERVICE );
+            if (!manager.isWifiEnabled())
+            {
+                final LayoutInflater layoutInflater = LayoutInflater.from( this );
+                final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder( this );
+                final View dialogView = layoutInflater.inflate( R.layout.dialog_wifi, null );
+                final DialogInterface.OnClickListener listener = new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        Log.d(LOG_TAG, "WiFiDialog: which=" + which);
+                        if (which == DialogInterface.BUTTON_POSITIVE) {
+                            manager.setWifiEnabled(true);
+                        }
+                        final CheckBox checkBox = (CheckBox) dialogView.findViewById( R.id.checkBoxNeverAskAgain );
+                        if (checkBox.isChecked()) {
+                            final SharedPreferences.Editor editor = sharedPreferences.edit();
+                            editor.putBoolean( KEY_CHECK_WIFI_STATUS, true );
+                            editor.apply();
+                        }
+                    }
+                };
+                dialogBuilder.setView( dialogView );
+                dialogBuilder.setPositiveButton( getString(R.string.turn_wifi_on), listener );
+                dialogBuilder.setNegativeButton( getString(R.string.cancel), listener );
+                final AlertDialog dialog = dialogBuilder.create();
+                dialog.show();
+            }
+        }
     }
 
     public void onPause()

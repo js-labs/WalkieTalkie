@@ -9,11 +9,14 @@
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceMedium"
             android:text="@string/_colon"
-            android:id="@+id/textViewStatus" android:padding="5dp"/>
+            android:id="@+id/textViewStatus"
+            android:padding="5dp"/>
     <ListView
             android:layout_width="wrap_content"
             android:layout_height="fill_parent"
-            android:id="@+id/listView" android:padding="5dp" android:layout_weight="1"/>
+            android:id="@+id/listView"
+            android:padding="5dp"
+            android:layout_weight="1"/>
     <org.jsl.wfwt.SwitchButton
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
