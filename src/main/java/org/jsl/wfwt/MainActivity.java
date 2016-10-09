@@ -422,7 +422,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                         final CheckBox checkBox = (CheckBox) dialogView.findViewById( R.id.checkBoxNeverAskAgain );
                         if (checkBox.isChecked()) {
                             final SharedPreferences.Editor editor = sharedPreferences.edit();
-                            editor.putBoolean( KEY_CHECK_WIFI_STATUS, true );
+                            editor.putBoolean( KEY_CHECK_WIFI_STATUS, false );
                             editor.apply();
                         }
                     }
