@@ -28,6 +28,7 @@
     <string name="station_name">Station name</string>
     <string name="system_error">System error</string>
     <string name="turn_wifi_on">Turn WiFi on</string>
+    <string name="use_volume_buttons_to_talk">Use volume buttons to talk</string>
     <string name="volume">Volume</string>
     <string name="wifi_dialog_message">Application can only see devices connected to the same WiFi access point.</string>
     <string name="wifi_is_off">WiFi is off</string>

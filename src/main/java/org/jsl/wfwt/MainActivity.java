@@ -41,12 +41,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     public static final String KEY_STATION_NAME = "station_name";
     public static final String KEY_VOLUME = "volume";
     private static final String KEY_CHECK_WIFI_STATUS = "check-wifi-status";
+    private static final String KEY_USE_VOLUME_BUTTONS_TO_TALK = "use-volume-buttons-to-talk";
 
     private boolean m_exit;
     private Intent m_serviceIntent;
     private ServiceConnection m_serviceConnection;
     private WalkieService.BinderImpl m_binder;
     private AudioRecorder m_audioRecorder;
+    private SwitchButton m_buttonTalk;
+    private boolean m_useVolumeButtonsToTalk;
+    private boolean m_recording;
 
     private String m_stationName;
     private int m_audioMaxVolume;
@@ -59,9 +63,21 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         public void onStateChanged( boolean state )
         {
             if (state)
-                m_audioRecorder.startRecording();
+            {
+                if (!m_recording)
+                {
+                    m_recording = true;
+                    m_audioRecorder.startRecording();
+                }
+            }
             else
-                m_audioRecorder.stopRecording();
+            {
+                if (m_recording)
+                {
+                    m_recording = false;
+                    m_audioRecorder.stopRecording();
+                }
+            }
         }
     }
 
@@ -142,51 +158,60 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     {
         private final EditText m_editTextStationName;
         private final SeekBar m_seekBarVolume;
-        private final CheckBox m_checkBox;
+        private final CheckBox m_checkBoxCheckWiFiStateOnStart;
+        private final CheckBox m_switchButtonUseVolumeButtonsToTalk;
 
-        public SettingsDialogClickListener( EditText editTextStationName, SeekBar seekBarVolume, CheckBox checkBox )
+        public SettingsDialogClickListener(
+                EditText editTextStationName,
+                SeekBar seekBarVolume,
+                CheckBox checkBoxCheckWiFiStateOnStart,
+                CheckBox switchButtonUseVolumeButtonsToTalk )
         {
             m_editTextStationName = editTextStationName;
             m_seekBarVolume = seekBarVolume;
-            m_checkBox = checkBox;
+            m_checkBoxCheckWiFiStateOnStart = checkBoxCheckWiFiStateOnStart;
+            m_switchButtonUseVolumeButtonsToTalk = switchButtonUseVolumeButtonsToTalk;
         }
 
         public void onClick( DialogInterface dialog, int which )
         {
-            final String stationName = m_editTextStationName.getText().toString();
-            final int audioVolume = m_seekBarVolume.getProgress();
-
-            final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
-            final SharedPreferences.Editor editor = sharedPreferences.edit();
-
-            if (m_stationName.compareTo(stationName) != 0)
+            if (which == DialogInterface.BUTTON_POSITIVE)
             {
-                final String title = getString(R.string.app_name) + ": " + stationName;
-                setTitle( title );
+                final String stationName = m_editTextStationName.getText().toString();
+                final int audioVolume = m_seekBarVolume.getProgress();
 
-                editor.putString( KEY_STATION_NAME, stationName );
-                m_binder.setStationName( stationName );
-                m_stationName = stationName;
+                final SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
+                final SharedPreferences.Editor editor = sharedPreferences.edit();
+
+                if (m_stationName.compareTo(stationName) != 0)
+                {
+                    final String title = getString(R.string.app_name) + ": " + stationName;
+                    setTitle(title);
+
+                    editor.putString( KEY_STATION_NAME, stationName );
+                    m_binder.setStationName( stationName );
+                    m_stationName = stationName;
+                }
+
+                if (audioVolume != m_audioVolume)
+                {
+                    editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
+
+                    final int audioStream = MainActivity.AUDIO_STREAM;
+                    final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
+                    Log.d(LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")");
+                    audioManager.setStreamVolume( audioStream, audioVolume, 0 );
+
+                    m_audioVolume = audioVolume;
+                }
+
+                final boolean useVolumeButtonsToTalk = m_switchButtonUseVolumeButtonsToTalk.isChecked();
+                editor.putBoolean( KEY_CHECK_WIFI_STATUS, m_checkBoxCheckWiFiStateOnStart.isChecked() );
+                editor.putBoolean( KEY_USE_VOLUME_BUTTONS_TO_TALK, useVolumeButtonsToTalk );
+                editor.apply();
+
+                MainActivity.this.m_useVolumeButtonsToTalk = useVolumeButtonsToTalk;
             }
-
-            if (audioVolume != m_audioVolume)
-            {
-                editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
-
-                final int audioStream = MainActivity.AUDIO_STREAM;
-                final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-                Log.d( LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")" );
-                audioManager.setStreamVolume( audioStream, audioVolume, 0 );
-
-                m_audioVolume = audioVolume;
-            }
-
-            final boolean checkWiFiStatusOnStart = m_checkBox.isChecked();
-            editor.putBoolean( KEY_CHECK_WIFI_STATUS, checkWiFiStatusOnStart );
-            editor.apply();
-
-            Log.i( LOG_TAG, "stationName=[" + stationName + "] audioVolume=" + m_audioVolume +
-                    " checkWiFiStatusOnStart=" + checkWiFiStatusOnStart );
         }
     }
 
@@ -200,9 +225,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             runOnUiThread( new Runnable() {
                 public void run() {
                     m_audioRecorder = audioRecorder;
-                    final SwitchButton buttonTalk = (SwitchButton) findViewById( R.id.buttonTalk );
-                    buttonTalk.setStateListener( new ButtonTalkListener() );
-                    buttonTalk.setEnabled( true );
+                    m_buttonTalk.setStateListener( new ButtonTalkListener() );
+                    m_buttonTalk.setEnabled( true );
                 }
             } );
         }
@@ -246,6 +270,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
         final TextView textView = (TextView) findViewById( R.id.textViewStatus );
         textView.setTextColor( Color.GREEN );
+
+        m_buttonTalk = (SwitchButton) findViewById( R.id.buttonTalk );
     }
 
     public boolean onCreateOptionsMenu( Menu menu )
@@ -266,16 +292,19 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final View dialogView = layoutInflater.inflate( R.layout.dialog_settings, null );
                 final EditText editText = (EditText) dialogView.findViewById( R.id.editTextStationName );
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
-                final CheckBox checkBox = (CheckBox) dialogView.findViewById( R.id.checkBoxCheckWiFiStatusOnStart );
+                final CheckBox checkBoxCheckWiFiStatusOnStart = (CheckBox) dialogView.findViewById( R.id.checkBoxCheckWiFiStatusOnStart );
+                final CheckBox checkBoxUseVolumeButtonsToTalk = (CheckBox) dialogView.findViewById( R.id.checkBoxUseVolumeButtonsToTalk );
 
                 editText.setText( m_stationName );
                 seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
-                checkBox.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, true) );
+                checkBoxCheckWiFiStatusOnStart.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, true) );
+                checkBoxUseVolumeButtonsToTalk.setChecked( sharedPreferences.getBoolean(KEY_USE_VOLUME_BUTTONS_TO_TALK, false) );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
                 dialogBuilder.setCancelable( true );
-                dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(editText, seekBar, checkBox) );
+                dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(
+                        editText, seekBar, checkBoxCheckWiFiStatusOnStart, checkBoxUseVolumeButtonsToTalk) );
                 dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
                 final AlertDialog dialog = dialogBuilder.create();
                 dialog.show();
@@ -318,6 +347,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         m_stationName = sharedPreferences.getString( KEY_STATION_NAME, null );
         if ((m_stationName == null) || m_stationName.isEmpty())
             m_stationName = Build.MODEL;
+
+        m_useVolumeButtonsToTalk = sharedPreferences.getBoolean( KEY_USE_VOLUME_BUTTONS_TO_TALK, false );
 
         if (!m_stationName.isEmpty())
         {
@@ -450,5 +481,43 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     {
         Log.i( LOG_TAG, "onDestroy" );
         super.onDestroy();
+    }
+
+    public boolean onKeyDown( int keyCode, KeyEvent event )
+    {
+        if (m_useVolumeButtonsToTalk)
+        {
+            if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) ||
+                (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))
+            {
+                if (!m_recording)
+                {
+                    m_audioRecorder.startRecording();
+                    m_recording = true;
+                    m_buttonTalk.setPressed( true );
+                }
+                return true;
+            }
+        }
+        return super.onKeyDown( keyCode, event );
+    }
+
+    public boolean onKeyUp( int keyCode, KeyEvent event )
+    {
+        if (m_useVolumeButtonsToTalk)
+        {
+            if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) ||
+                (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))
+            {
+                if (m_recording)
+                {
+                    m_audioRecorder.stopRecording();
+                    m_recording = false;
+                    m_buttonTalk.setPressed( false );
+                }
+                return true;
+            }
+        }
+        return super.onKeyDown( keyCode, event );
     }
 }

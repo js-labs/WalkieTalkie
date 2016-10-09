@@ -27,6 +27,11 @@
     <CheckBox
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="@string/use_volume_buttons_to_talk"
+            android:id="@+id/checkBoxUseVolumeButtonsToTalk" android:paddingTop="10dp" android:paddingBottom="10dp"/>
+    <CheckBox
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="@string/check_wifi_status_on_start"
             android:id="@+id/checkBoxCheckWiFiStatusOnStart" android:paddingTop="10dp" android:paddingBottom="10dp"/>
 </LinearLayout>
