@@ -15,3 +15,7 @@ as a client at the same time.
 Program was implemented as a demonstration of JS-Collider:
 Java high performance scalable NIO framework, see
 https://github.com/js-labs/js-collider.
+
+Download app from
+* [Google Play](https://play.google.com/store/apps/details?id=org.jsl.wfwt)
+* [F-Droid](https://f-droid.org/repository/browse/?fdfilter=walkie+talkie&fdid=org.jsl.wfwt)
