@@ -22,14 +22,10 @@ import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.util.Log;
 import android.util.Base64;
-import org.jsl.collider.TimerQueue;
-import org.jsl.collider.Connector;
-import org.jsl.collider.Acceptor;
-import org.jsl.collider.Collider;
-import org.jsl.collider.Session;
+import org.jsl.collider.*;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
@@ -51,6 +47,7 @@ class Channel
         public int nsdUpdates;
         public Connector connector;
         public Session session;
+        public ChannelSession channelSession;
         public String stationName;
         public String addr;
         public int state;
@@ -59,10 +56,16 @@ class Channel
 
     private static class SessionInfo
     {
+        public final String addr;
         public String stationName;
-        public String addr;
         public int state;
         public long ping;
+
+        public SessionInfo(String addr, String stationName)
+        {
+            this.addr = addr;
+            this.stationName = stationName;
+        }
     }
 
     private final String m_deviceID;
@@ -78,7 +81,7 @@ class Channel
 
     private final ReentrantLock m_lock;
     private final TreeMap<String, ServiceInfo> m_serviceInfo; /* Sorting required */
-    private final LinkedHashMap<Session, SessionInfo> m_sessions;
+    private final LinkedHashMap<ChannelSession, SessionInfo> m_sessions;
     private StateListener m_stateListener;
     private ChannelAcceptor m_acceptor;
     private int m_localPort;
@@ -351,8 +354,6 @@ class Channel
             {
                 if (m_stopLatch == null)
                 {
-                    final SessionInfo sessionInfo = new SessionInfo();
-                    m_sessions.put( session, sessionInfo );
                     return new HandshakeServerSession(
                             m_audioFormat, m_stationName, Channel.this, session, m_sessionManager, m_timerQueue, m_pingInterval );
                 }
@@ -534,13 +535,13 @@ class Channel
         {
             if (m_serviceName.compareTo(e.getKey()) > 0)
             {
-                /* Show only services with station name (i.e received HandshakeReply) */
-                if (e.getValue().stationName != null)
+                /* Show only services which are connected */
+                if (e.getValue().channelSession != null)
                     sessions++;
             }
         }
 
-        for (Map.Entry<Session, SessionInfo> e : m_sessions.entrySet())
+        for (Map.Entry<ChannelSession, SessionInfo> e : m_sessions.entrySet())
         {
             if (e.getValue().stationName != null)
                 sessions++;
@@ -552,19 +553,20 @@ class Channel
         {
             if (m_serviceName.compareTo(e.getKey()) > 0)
             {
-                if (e.getValue().stationName != null)
+                if (e.getValue().channelSession != null)
                 {
                     final ServiceInfo serviceInfo = e.getValue();
                     stationInfo[idx++] = new StationInfo(
                             serviceInfo.stationName,
                             serviceInfo.addr,
                             serviceInfo.state,
-                            serviceInfo.ping );
+                            serviceInfo.ping,
+                            serviceInfo.channelSession);
                 }
             }
         }
 
-        for (Map.Entry<Session, SessionInfo> e : m_sessions.entrySet())
+        for (Map.Entry<ChannelSession, SessionInfo> e : m_sessions.entrySet())
         {
             final SessionInfo sessionInfo = e.getValue();
             if (sessionInfo.stationName != null)
@@ -573,7 +575,8 @@ class Channel
                         sessionInfo.stationName,
                         sessionInfo.addr,
                         sessionInfo.state,
-                        sessionInfo.ping );
+                        sessionInfo.ping,
+                        e.getKey());
             }
         }
 
@@ -627,7 +630,7 @@ class Channel
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
         m_serviceInfo = new TreeMap<String, ServiceInfo>();
-        m_sessions = new LinkedHashMap<Session, SessionInfo>();
+        m_sessions = new LinkedHashMap<ChannelSession, SessionInfo>();
         m_lock = new ReentrantLock();
 
         m_acceptor = new ChannelAcceptor();
@@ -770,7 +773,7 @@ class Channel
         }
     }
 
-    public void setStationName( Session session, String stationName )
+    public void addSession( ChannelSession channelSession, String stationName )
     {
         /* Called by the server session channel
          * when received a login request with a client station name.
@@ -778,17 +781,12 @@ class Channel
         m_lock.lock();
         try
         {
-            final SessionInfo sessionInfo = m_sessions.get( session );
-            if (sessionInfo != null)
+            SessionInfo sessionInfo = m_sessions.get( channelSession );
+            if (sessionInfo == null)
             {
-                final String str = sessionInfo.stationName;
-                sessionInfo.stationName = stationName;
-                if (str == null)
-                {
-                    sessionInfo.addr = session.getRemoteAddress().toString();
-                    sessionInfo.state = 0;
-                    sessionInfo.ping = 0;
-                }
+                final String addr = channelSession.getRemoteAddress().toString();
+                sessionInfo = new SessionInfo( stationName, addr );
+                m_sessions.put( channelSession, sessionInfo );
 
                 final StateListener stateListener = m_stateListener;
                 if (stateListener != null)
@@ -796,7 +794,71 @@ class Channel
             }
             else
             {
-                Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
+                Log.e( LOG_TAG, m_name + ": internal error: session " + channelSession.toString() + " not found" );
+                if (BuildConfig.DEBUG)
+                    throw new AssertionError();
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void setStationName( ChannelSession channelSession, String stationName )
+    {
+        /* Called by the server session channel
+         * when received a login request with a client station name.
+         */
+        m_lock.lock();
+        try
+        {
+            final SessionInfo sessionInfo = m_sessions.get( channelSession );
+            if (sessionInfo == null)
+            {
+                Log.e( LOG_TAG, m_name + ": internal error: session " + channelSession.toString() + " not found" );
+                if (BuildConfig.DEBUG)
+                    throw new AssertionError();
+            }
+            else
+            {
+                sessionInfo.stationName = stationName;
+
+                final StateListener stateListener = m_stateListener;
+                if (stateListener != null)
+                    stateListener.onStationListChanged( getStationListLocked() );
+            }
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void setStationInfo( String serviceName, ChannelSession channelSession, String stationName )
+    {
+        /* Called by the client session instance
+         * when received handshake reply with a server station name.
+         */
+        m_lock.lock();
+        try
+        {
+            final ServiceInfo serviceInfo = m_serviceInfo.get( serviceName );
+            if (serviceInfo != null)
+            {
+                serviceInfo.channelSession = channelSession;
+                serviceInfo.stationName = stationName;
+                serviceInfo.addr = channelSession.getRemoteAddress().toString();
+                serviceInfo.state = 0;
+                serviceInfo.ping = 0;
+
+                final StateListener stateListener = m_stateListener;
+                if (stateListener != null)
+                    stateListener.onStationListChanged( getStationListLocked() );
+            }
+            else
+            {
+                Log.e( LOG_TAG, m_name + ": internal error: service [" + serviceName + "] not found" );
                 if (BuildConfig.DEBUG)
                     throw new AssertionError();
             }
@@ -809,8 +871,8 @@ class Channel
 
     public void setStationName( String serviceName, String stationName )
     {
-        /* Called by the client session instance
-         * when received handshake reply with a server station name.
+        /* Called by the client session channel
+         * when received a new peer station name.
          */
         m_lock.lock();
         try
@@ -819,9 +881,6 @@ class Channel
             if (serviceInfo != null)
             {
                 serviceInfo.stationName = stationName;
-                serviceInfo.addr = serviceInfo.session.getRemoteAddress().toString();
-                serviceInfo.state = 0;
-                serviceInfo.ping = 0;
 
                 final StateListener stateListener = m_stateListener;
                 if (stateListener != null)
@@ -847,22 +906,24 @@ class Channel
         {
             /* Broadcast new station name to all connected stations */
             m_stationName = stationName;
-            final ByteBuffer msg = Protocol.StationName.create( stationName );
+            final RetainableByteBuffer msg = Protocol.StationName.create( stationName );
 
             for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
             {
                 final ServiceInfo serviceInfo = entry.getValue();
                 final Session session = serviceInfo.session;
                 if (session != null)
-                    session.sendData( msg.duplicate() );
+                    session.sendData( msg );
             }
 
-            for (Session session : m_sessions.keySet())
-                session.sendData( msg.duplicate() );
+            for (ChannelSession session : m_sessions.keySet())
+                session.sendMessage( msg );
+
+            msg.release();
         }
-        catch (CharacterCodingException ex)
+        catch (final CharacterCodingException ex)
         {
-            Log.w( LOG_TAG, ex.toString() );
+            Log.w( LOG_TAG, ex.toString(), ex );
         }
         finally
         {
@@ -916,7 +977,7 @@ class Channel
         }
     }
 
-    public void setPing( String serviceName, Session session, long ping )
+    public void setPing( String serviceName, ChannelSession session, long ping )
     {
         m_lock.lock();
         try
@@ -925,19 +986,18 @@ class Channel
             {
                 /* Session created with acceptor */
                 final SessionInfo sessionInfo = m_sessions.get( session );
-                if (sessionInfo != null)
-                {
-                    sessionInfo.ping = ping;
-
-                    final StateListener stateListener = m_stateListener;
-                    if (stateListener != null)
-                        stateListener.onStationListChanged( getStationListLocked() );
-                }
-                else
+                if (sessionInfo == null)
                 {
                     Log.e( LOG_TAG, m_name + ": internal error: session not found" );
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
+                }
+                else
+                {
+                    sessionInfo.ping = ping;
+                    final StateListener stateListener = m_stateListener;
+                    if (stateListener != null)
+                        stateListener.onStationListChanged( getStationListLocked() );
                 }
             }
             else
@@ -966,7 +1026,7 @@ class Channel
         }
     }
 
-    public void removeSession( String serviceName, Session session )
+    public void removeSession( String serviceName, ChannelSession channelSession )
     {
         m_lock.lock();
         try
@@ -974,10 +1034,10 @@ class Channel
             if (serviceName == null)
             {
                 /* Session created with acceptor */
-                final SessionInfo sessionInfo = m_sessions.remove( session );
+                final SessionInfo sessionInfo = m_sessions.remove( channelSession );
                 if (sessionInfo == null)
                 {
-                    Log.e( LOG_TAG, m_name + ": internal error: session " + session.toString() + " not found" );
+                    Log.e( LOG_TAG, m_name + ": internal error: session not found" );
                     if (BuildConfig.DEBUG)
                         throw new AssertionError();
                 }
@@ -1000,7 +1060,7 @@ class Channel
                 }
                 else
                 {
-                    if (BuildConfig.DEBUG && (serviceInfo.session != session))
+                    if (BuildConfig.DEBUG && (serviceInfo.channelSession != channelSession))
                         throw new AssertionError();
 
                     if (serviceInfo.nsdServiceInfo == null)
@@ -1013,6 +1073,7 @@ class Channel
                     else
                     {
                         serviceInfo.session = null;
+                        serviceInfo.channelSession = null;
                         serviceInfo.stationName = null;
                         serviceInfo.addr = null;
                         serviceInfo.state = 0;

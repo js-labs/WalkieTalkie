@@ -12,7 +12,7 @@
             android:id="@+id/textViewStatus"
             android:padding="5dp"/>
     <ListView
-            android:layout_width="wrap_content"
+            android:layout_width="fill_parent"
             android:layout_height="fill_parent"
             android:id="@+id/listView"
             android:padding="5dp"

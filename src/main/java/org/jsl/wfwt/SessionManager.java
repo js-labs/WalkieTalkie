@@ -72,9 +72,9 @@ public class SessionManager
         }
     }
 
-    public void send( RetainableByteBuffer msg )
+    public void sendAudioFrame( RetainableByteBuffer msg, boolean ptt )
     {
         for (ChannelSession session : m_sessions)
-            session.sendMessage(msg);
+            session.sendAudioFrame(msg, ptt);
     }
 }

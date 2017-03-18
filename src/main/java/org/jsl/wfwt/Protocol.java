@@ -59,6 +59,15 @@ public class Protocol
             return init( byteBuffer, (short) (HEADER_SIZE + extSize), type );
         }
 
+        public static RetainableByteBuffer createEx( short type, short extSize )
+        {
+            if ((HEADER_SIZE + extSize) > Short.MAX_VALUE)
+                throw new InvalidParameterException();
+            final RetainableByteBuffer byteBuffer = RetainableByteBuffer.allocateDirect( HEADER_SIZE + extSize );
+            init( byteBuffer.getNioByteBuffer(), (short) (HEADER_SIZE + extSize), type );
+            return byteBuffer;
+        }
+
         public static int getLength( ByteBuffer msg )
         {
             return msg.getShort( msg.position() );
@@ -328,12 +337,12 @@ public class Protocol
     {
         public static final short ID = MSG_STATION_NAME;
 
-        public static ByteBuffer create( String stationName ) throws CharacterCodingException
+        public static RetainableByteBuffer create( String stationName ) throws CharacterCodingException
         {
             final CharsetEncoder encoder = Charset.defaultCharset().newEncoder();
             final ByteBuffer stationNameBB = encoder.encode( CharBuffer.wrap(stationName) );
             final short extSize = (short) ((Short.SIZE / Byte.SIZE) + stationNameBB.remaining());
-            final ByteBuffer msg = create( ID, extSize );
+            final RetainableByteBuffer msg = createEx( ID, extSize );
             msg.putShort( (short) stationNameBB.remaining() );
             msg.put( stationNameBB );
             msg.rewind();

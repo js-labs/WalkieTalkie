@@ -24,12 +24,14 @@ public class StationInfo
     public final String addr;
     public final int transmission;
     public final long ping;
+    public final ChannelSession session;
 
-    public StationInfo( String name, String addr, int transmission, long ping )
+    public StationInfo( String name, String addr, int transmission, long ping, ChannelSession session )
     {
         this.name = name;
         this.addr = addr;
         this.transmission = transmission;
         this.ping = ping;
+        this.session = session;
     }
 }

@@ -96,6 +96,8 @@ public class HandshakeServerSession implements Session.Listener
         }
         else
         {
+            boolean interrupted = false;
+
             if (m_timerHandler != null)
             {
                 try
@@ -110,7 +112,8 @@ public class HandshakeServerSession implements Session.Listener
                 }
                 catch (final InterruptedException ex)
                 {
-                    Thread.currentThread().interrupt();
+                    Log.w( LOG_TAG, ex.toString(), ex );
+                    interrupted = true;
                 }
             }
 
@@ -141,16 +144,17 @@ public class HandshakeServerSession implements Session.Listener
                              */
                             final ByteBuffer handshakeReply = Protocol.HandshakeReplyOk.create( m_audioFormat, m_stationName );
                             m_session.sendData( handshakeReply );
-                            m_channel.setStationName( m_session, stationName );
 
                             final ChannelSession channelSession = new ChannelSession(
                                     m_channel, null, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval );
+
+                            m_channel.addSession( channelSession, stationName );
                             m_session.replaceListener( channelSession );
                         }
                     }
                     catch (final CharacterCodingException ex)
                     {
-                        Log.e( LOG_TAG, getLogPrefix() + ex.toString() );
+                        Log.e( LOG_TAG, getLogPrefix() + ex.toString(), ex );
                         m_session.closeConnection();
                     }
                 }
@@ -168,7 +172,7 @@ public class HandshakeServerSession implements Session.Listener
                     }
                     catch (final CharacterCodingException ex)
                     {
-                        Log.i( LOG_TAG, ex.toString() );
+                        Log.i( LOG_TAG, ex.toString(), ex );
                     }
                     m_session.closeConnection();
                 }
@@ -179,12 +183,16 @@ public class HandshakeServerSession implements Session.Listener
                        "unexpected message " + messageID + " received, closing connection." );
                 m_session.closeConnection();
             }
+
+            if (interrupted)
+                Thread.currentThread().interrupt();
         }
     }
 
     public void onConnectionClosed()
     {
         Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
+        boolean interrupted = false;
         if (m_timerHandler != null)
         {
             try
@@ -193,11 +201,13 @@ public class HandshakeServerSession implements Session.Listener
             }
             catch (final InterruptedException ex)
             {
-                Log.i( LOG_TAG, ex.toString() );
-                Thread.currentThread().interrupt();
+                Log.i( LOG_TAG, ex.toString(), ex );
+                interrupted = true;
             }
         }
-        m_channel.removeSession( null, m_session );
         m_streamDefragger.close();
+
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 }
