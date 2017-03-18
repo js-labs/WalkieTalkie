@@ -50,7 +50,9 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     private AudioRecorder m_audioRecorder;
     private SwitchButton m_buttonTalk;
     private boolean m_useVolumeButtonsToTalk;
-    private boolean m_recording;
+
+    private boolean m_ptt;
+    private int m_receivers;
 
     private String m_stationName;
     private int m_audioMaxVolume;
@@ -64,18 +66,24 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         {
             if (state)
             {
-                if (!m_recording)
+                if (!m_ptt)
                 {
-                    m_recording = true;
-                    m_audioRecorder.startRecording();
+                    m_ptt = true;
+                    if (m_receivers > 0)
+                        m_audioRecorder.setPTT( true );
+                    else
+                        m_audioRecorder.startRecording( true );
                 }
             }
             else
             {
-                if (m_recording)
+                if (m_ptt)
                 {
-                    m_recording = false;
-                    m_audioRecorder.stopRecording();
+                    m_ptt = false;
+                    if (m_receivers > 0)
+                        m_audioRecorder.setPTT( false );
+                    else
+                        m_audioRecorder.stopRecording();
                 }
             }
         }
@@ -83,28 +91,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
     private static class ListViewAdapter extends ArrayAdapter<StationInfo>
     {
+        private final MainActivity m_activity;
         private final LayoutInflater m_inflater;
         private final StringBuilder m_stringBuilder;
         private StationInfo [] m_stationInfo;
 
-        private static class RowViewInfo
+        public ListViewAdapter( MainActivity activity )
         {
-            public final TextView textViewStationName;
-            public final TextView textViewAddrAndPing;
-            public final StateView stateView;
-
-            public RowViewInfo( TextView textViewStationName, TextView textViewAddrAndPing, StateView stateView )
-            {
-                this.textViewStationName = textViewStationName;
-                this.textViewAddrAndPing = textViewAddrAndPing;
-                this.stateView = stateView;
-            }
-        }
-
-        public ListViewAdapter( Context context )
-        {
-            super( context, R.layout.list_view_row );
-            m_inflater = (LayoutInflater) context.getSystemService( LAYOUT_INFLATER_SERVICE );
+            super( activity, R.layout.list_view_row );
+            m_activity = activity;
+            m_inflater = (LayoutInflater) activity.getSystemService( LAYOUT_INFLATER_SERVICE );
             m_stringBuilder = new StringBuilder();
             m_stationInfo = new StationInfo[0];
         }
@@ -120,35 +116,33 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             return m_stationInfo.length;
         }
 
+        public StationInfo getItem( int position )
+        {
+            return m_stationInfo[position];
+        }
+
         public View getView( int position, View convertView, ViewGroup parent )
         {
-            View rowView = convertView;
-            RowViewInfo rowViewInfo;
+            ListViewRow rowView = (ListViewRow) convertView;
             if (rowView == null)
             {
-                rowView = m_inflater.inflate( R.layout.list_view_row, null, true );
-                final TextView textViewStationName = (TextView) rowView.findViewById( R.id.textViewStationName );
-                final TextView textViewStationAddr = (TextView) rowView.findViewById( R.id.textViewAddrAndPing );
-                final StateView stateView = (StateView) rowView.findViewById( R.id.stateView );
-                rowViewInfo = new RowViewInfo( textViewStationName, textViewStationAddr, stateView );
-                rowView.setTag( rowViewInfo );
+                rowView = (ListViewRow) m_inflater.inflate( R.layout.list_view_row, null, true );
+                rowView.init( m_activity );
             }
-            else
-                rowViewInfo = (RowViewInfo) rowView.getTag();
 
-            rowViewInfo.textViewStationName.setText( m_stationInfo[position].name );
+            final StationInfo stationInfo = m_stationInfo[position];
 
             m_stringBuilder.setLength(0);
-            m_stringBuilder.append( m_stationInfo[position].addr );
-            final long ping = m_stationInfo[position].ping;
+            m_stringBuilder.append( stationInfo.addr );
+            final long ping = stationInfo.ping;
             if (ping > 0)
             {
                 m_stringBuilder.append( ", " );
-                m_stringBuilder.append( m_stationInfo[position].ping );
+                m_stringBuilder.append( stationInfo.ping );
                 m_stringBuilder.append( " ms" );
             }
-            rowViewInfo.textViewAddrAndPing.setText( m_stringBuilder.toString() );
-            rowViewInfo.stateView.setIndicatorState( m_stationInfo[position].transmission );
+
+            rowView.setData( position, stationInfo.name, m_stringBuilder.toString(), stationInfo.transmission );
 
             return rowView;
         }
@@ -212,6 +206,25 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
                 MainActivity.this.m_useVolumeButtonsToTalk = useVolumeButtonsToTalk;
             }
+        }
+    }
+
+    public void onListViewItemPressed( int position, boolean pressed )
+    {
+        final StationInfo stationInfo = m_listViewAdapter.getItem( position );
+        if (pressed)
+        {
+            stationInfo.session.setSendAudioFrame( true );
+            final int receivers = m_receivers++;
+            if (!m_ptt && (receivers == 0))
+                m_audioRecorder.startRecording( false );
+        }
+        else
+        {
+            stationInfo.session.setSendAudioFrame( false );
+            final int receivers = --m_receivers;
+            if (!m_ptt && (receivers == 0))
+                m_audioRecorder.stopRecording();
         }
     }
 
@@ -490,10 +503,14 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) ||
                 (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))
             {
-                if (!m_recording)
+                if (!m_ptt)
                 {
-                    m_audioRecorder.startRecording();
-                    m_recording = true;
+                    if (m_receivers == 0)
+                        m_audioRecorder.startRecording( true );
+                    else
+                        m_audioRecorder.setPTT( true );
+
+                    m_ptt = true;
                     m_buttonTalk.setPressed( true );
                 }
                 return true;
@@ -509,10 +526,12 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP) ||
                 (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN))
             {
-                if (m_recording)
+                if (m_ptt)
                 {
-                    m_audioRecorder.stopRecording();
-                    m_recording = false;
+                    if (m_receivers == 0)
+                        m_audioRecorder.stopRecording();
+
+                    m_ptt = false;
                     m_buttonTalk.setPressed( false );
                 }
                 return true;

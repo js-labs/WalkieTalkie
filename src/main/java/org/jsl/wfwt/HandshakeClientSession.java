@@ -148,10 +148,10 @@ public class HandshakeClientSession implements Session.Listener
                         Log.i( LOG_TAG, getLogPrefix() +
                                 "HandshakeReplyOk: audioFormat[" + audioFormat + "] stationName[" + stationName + "]" );
 
-                        m_channel.setStationName( m_serviceName, stationName );
-
                         final ChannelSession channelSession = new ChannelSession(
                                 m_channel, m_serviceName, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval);
+
+                        m_channel.setStationInfo( m_serviceName, channelSession, stationName );
                         m_session.replaceListener( channelSession );
                     }
                 }
@@ -188,6 +188,7 @@ public class HandshakeClientSession implements Session.Listener
     public void onConnectionClosed()
     {
         Log.i( LOG_TAG, getLogPrefix() + ": connection closed" );
+        boolean interrupted = false;
 
         if (m_timerHandler != null)
         {
@@ -197,12 +198,14 @@ public class HandshakeClientSession implements Session.Listener
             }
             catch (final InterruptedException ex)
             {
-                Log.w( LOG_TAG, ex.toString() );
-                Thread.currentThread().interrupt();
+                Log.w( LOG_TAG, ex.toString(), ex );
+                interrupted = true;
             }
         }
 
-        m_channel.removeSession( m_serviceName, m_session );
         m_streamDefragger.close();
+
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 }

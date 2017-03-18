@@ -47,13 +47,13 @@ public class AudioRecorder implements Runnable
     private final ReentrantLock m_lock;
     private final Condition m_cond;
     private int m_state;
+    private boolean m_ptt;
 
     private static final int IDLE  = 0;
     private static final int START = 1;
     private static final int RUN   = 2;
     private static final int STOP  = 3;
-    private static final int SHTDN = 4; /* shutdown */
-    private static final int ESTPD = 5; /* encoder stopped */
+    private static final int SHTDN = 4; // shutdown
 
     private AudioRecorder(
             SessionManager sessionManager,
@@ -100,6 +100,8 @@ public class AudioRecorder implements Runnable
         RetainableByteBuffer byteBuffer = m_byteBufferCache.get();
         byte [] byteBufferArray = byteBuffer.getNioByteBuffer().array();
         int byteBufferArrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
+        boolean interrupted = false;
+        boolean ptt;
         int frames = 0;
         try
         {
@@ -114,6 +116,7 @@ public class AudioRecorder implements Runnable
                     if (m_state == START)
                     {
                         m_audioRecord.startRecording();
+                        m_state = RUN;
                     }
                     else if (m_state == STOP)
                     {
@@ -138,6 +141,8 @@ public class AudioRecorder implements Runnable
                     }
                     else if (m_state == SHTDN)
                         break;
+
+                    ptt = m_ptt;
                 }
                 finally
                 {
@@ -169,7 +174,7 @@ public class AudioRecorder implements Runnable
                     byteBuffer.position( position );
                     byteBuffer.limit( limit );
                     final RetainableByteBuffer msg = byteBuffer.slice();
-                    m_sessionManager.send( msg );
+                    m_sessionManager.sendAudioFrame( msg, ptt );
                     frames++;
 
                     if (m_list != null)
@@ -193,8 +198,8 @@ public class AudioRecorder implements Runnable
         }
         catch (final InterruptedException ex)
         {
-            Log.e( LOG_TAG, ex.toString() );
-            Thread.currentThread().interrupt();
+            Log.e( LOG_TAG, ex.toString(), ex );
+            interrupted = true;
         }
 
         m_audioRecord.stop();
@@ -202,9 +207,27 @@ public class AudioRecorder implements Runnable
         byteBuffer.release();
 
         Log.i( LOG_TAG, "run [" + m_audioFormat + "]: done" );
+
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 
-    public void startRecording()
+    public void setPTT( boolean ptt )
+    {
+        m_lock.lock();
+        try
+        {
+            if (BuildConfig.DEBUG && (m_state != START) && (m_state != RUN))
+                throw new AssertionError();
+            m_ptt = ptt;
+        }
+        finally
+        {
+            m_lock.unlock();
+        }
+    }
+
+    public void startRecording( boolean ptt )
     {
         Log.d( LOG_TAG, "startRecording" );
         m_lock.lock();
@@ -217,6 +240,7 @@ public class AudioRecorder implements Runnable
             }
             else if (m_state == STOP)
                 m_state = RUN;
+            m_ptt = ptt;
         }
         finally
         {
@@ -260,7 +284,7 @@ public class AudioRecorder implements Runnable
         }
         catch (final InterruptedException ex)
         {
-            Log.e( LOG_TAG, ex.toString() );
+            Log.e( LOG_TAG, ex.toString(), ex );
         }
 
         if (m_audioPlayer != null)

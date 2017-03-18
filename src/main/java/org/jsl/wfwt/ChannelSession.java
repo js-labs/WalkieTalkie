@@ -23,6 +23,8 @@ import org.jsl.collider.RetainableByteBuffer;
 import org.jsl.collider.Session;
 import org.jsl.collider.StreamDefragger;
 import org.jsl.collider.TimerQueue;
+
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +52,8 @@ public class ChannelSession implements Session.Listener
     private int m_pingTimeouts;
     private long m_pingSendTime;
     private long m_ping;
+
+    private boolean m_sendAudioFrame;
 
     private String getLogPrefix()
     {
@@ -105,7 +109,7 @@ public class ChannelSession implements Session.Listener
                 if (Math.abs(ping - m_ping) > 10)
                 {
                     m_ping = ping;
-                    m_channel.setPing( m_serviceName, m_session, ping );
+                    m_channel.setPing( m_serviceName, this, ping );
                 }
             break;
 
@@ -116,14 +120,14 @@ public class ChannelSession implements Session.Listener
                     if (stationName.length() > 0)
                     {
                         if (m_serviceName == null)
-                            m_channel.setStationName( m_session, stationName );
+                            m_channel.setStationName( this, stationName );
                         else
                             m_channel.setStationName( m_serviceName, stationName );
                     }
                 }
                 catch (final CharacterCodingException ex)
                 {
-                    Log.w( LOG_TAG, ex.toString() );
+                    Log.w( LOG_TAG, ex.toString(), ex );
                 }
             break;
 
@@ -212,13 +216,13 @@ public class ChannelSession implements Session.Listener
             }
             catch (final InterruptedException ex)
             {
-                Log.w( LOG_TAG, ex.toString() );
+                Log.w( LOG_TAG, ex.toString(), ex );
                 Thread.currentThread().interrupt();
             }
             m_timerHandler = null;
         }
 
-        m_channel.removeSession( m_serviceName, m_session );
+        m_channel.removeSession( m_serviceName, this );
         m_sessionManager.removeSession( this );
         m_audioPlayer.stopAndWait();
         m_streamDefragger.close();
@@ -227,5 +231,21 @@ public class ChannelSession implements Session.Listener
     public final int sendMessage( RetainableByteBuffer msg )
     {
         return m_session.sendData( msg );
+    }
+
+    public final void sendAudioFrame( RetainableByteBuffer audioFrame, boolean ptt )
+    {
+        if (ptt || m_sendAudioFrame)
+            m_session.sendData( audioFrame );
+    }
+
+    public final void setSendAudioFrame( boolean sendAudioFrame )
+    {
+        m_sendAudioFrame = sendAudioFrame;
+    }
+
+    public SocketAddress getRemoteAddress()
+    {
+        return m_session.getRemoteAddress();
     }
 }
