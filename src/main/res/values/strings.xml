@@ -13,6 +13,7 @@
         for further details.
     </string>
     <string name="app_name">WiFi Walkie Talkie</string>
+    <string name="back_button_exits">Back button exits</string>
     <string name="cancel">Cancel</string>
     <string name="check_wifi_status_on_start">Check WiFi status on start</string>
     <string name="close">Close</string>

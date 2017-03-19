@@ -42,6 +42,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     public static final String KEY_VOLUME = "volume";
     private static final String KEY_CHECK_WIFI_STATUS = "check-wifi-status";
     private static final String KEY_USE_VOLUME_BUTTONS_TO_TALK = "use-volume-buttons-to-talk";
+    private static final String KEY_BACK_BUTTON_EXITS = "back-button-exits";
 
     private boolean m_exit;
     private Intent m_serviceIntent;
@@ -153,18 +154,21 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         private final EditText m_editTextStationName;
         private final SeekBar m_seekBarVolume;
         private final CheckBox m_checkBoxCheckWiFiStateOnStart;
-        private final CheckBox m_switchButtonUseVolumeButtonsToTalk;
+        private final CheckBox m_checkBoxUseVolumeButtonsToTalk;
+        private final CheckBox m_checkBoxBackButtonExits;
 
         public SettingsDialogClickListener(
                 EditText editTextStationName,
                 SeekBar seekBarVolume,
                 CheckBox checkBoxCheckWiFiStateOnStart,
-                CheckBox switchButtonUseVolumeButtonsToTalk )
+                CheckBox checkBoxUseVolumeButtonsToTalk,
+                CheckBox checkBoxBackButtonExits)
         {
             m_editTextStationName = editTextStationName;
             m_seekBarVolume = seekBarVolume;
             m_checkBoxCheckWiFiStateOnStart = checkBoxCheckWiFiStateOnStart;
-            m_switchButtonUseVolumeButtonsToTalk = switchButtonUseVolumeButtonsToTalk;
+            m_checkBoxUseVolumeButtonsToTalk = checkBoxUseVolumeButtonsToTalk;
+            m_checkBoxBackButtonExits = checkBoxBackButtonExits;
         }
 
         public void onClick( DialogInterface dialog, int which )
@@ -174,7 +178,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final String stationName = m_editTextStationName.getText().toString();
                 final int audioVolume = m_seekBarVolume.getProgress();
 
-                final SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
+                final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
                 final SharedPreferences.Editor editor = sharedPreferences.edit();
 
                 if (m_stationName.compareTo(stationName) != 0)
@@ -199,9 +203,10 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                     m_audioVolume = audioVolume;
                 }
 
-                final boolean useVolumeButtonsToTalk = m_switchButtonUseVolumeButtonsToTalk.isChecked();
+                final boolean useVolumeButtonsToTalk = m_checkBoxUseVolumeButtonsToTalk.isChecked();
                 editor.putBoolean( KEY_CHECK_WIFI_STATUS, m_checkBoxCheckWiFiStateOnStart.isChecked() );
                 editor.putBoolean( KEY_USE_VOLUME_BUTTONS_TO_TALK, useVolumeButtonsToTalk );
+                editor.putBoolean( KEY_BACK_BUTTON_EXITS, m_checkBoxBackButtonExits.isChecked() );
                 editor.apply();
 
                 MainActivity.this.m_useVolumeButtonsToTalk = useVolumeButtonsToTalk;
@@ -307,17 +312,19 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
                 final CheckBox checkBoxCheckWiFiStatusOnStart = (CheckBox) dialogView.findViewById( R.id.checkBoxCheckWiFiStatusOnStart );
                 final CheckBox checkBoxUseVolumeButtonsToTalk = (CheckBox) dialogView.findViewById( R.id.checkBoxUseVolumeButtonsToTalk );
+                final CheckBox checkBoxBackButtonExists = (CheckBox) dialogView.findViewById( R.id.checkBoxBackButtonExits );
 
                 editText.setText( m_stationName );
                 seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
                 checkBoxCheckWiFiStatusOnStart.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, true) );
                 checkBoxUseVolumeButtonsToTalk.setChecked( sharedPreferences.getBoolean(KEY_USE_VOLUME_BUTTONS_TO_TALK, false) );
+                checkBoxBackButtonExists.setChecked( sharedPreferences.getBoolean(KEY_BACK_BUTTON_EXITS, false) );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
                 dialogBuilder.setCancelable( true );
                 dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(
-                        editText, seekBar, checkBoxCheckWiFiStatusOnStart, checkBoxUseVolumeButtonsToTalk) );
+                        editText, seekBar, checkBoxCheckWiFiStatusOnStart, checkBoxUseVolumeButtonsToTalk, checkBoxBackButtonExists) );
                 dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
                 final AlertDialog dialog = dialogBuilder.create();
                 dialog.show();
@@ -537,6 +544,13 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 return true;
             }
         }
-        return super.onKeyDown( keyCode, event );
+        return super.onKeyUp( keyCode, event );
+    }
+
+    public void onBackPressed()
+    {
+        final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+        m_exit = sharedPreferences.getBoolean( KEY_BACK_BUTTON_EXITS, false );
+        super.onBackPressed();
     }
 }
