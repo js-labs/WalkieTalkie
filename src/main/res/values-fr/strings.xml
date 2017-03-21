@@ -19,7 +19,7 @@
     <string name="close">Fermer</string>
     <string name="enable">Activer</string>
     <string name="exit">Quitter</string>
-    <string name="network_initialization_failed">Échec de l'initialisation du réseau</string>
+    <string name="network_initialization_failed">Échec de l\'initialisation du réseau</string>
     <string name="never_ask_again">Ne plus redemander</string>
     <string name="nsd_not_found">Service NSD introuvable</string>
     <string name="push_to_talk">\nPUSH-TO-TALK\n</string>
