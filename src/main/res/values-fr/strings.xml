@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="_colon"> : </string>
+    <string name="about">À Propos</string>
+    <string name="about_text">
+        Cette application transmet le son enregistré par le micro à d\'autres appareils
+        exécutant la même application. Elle fonctionne donc comme une radio Talkie Walkie.\n\n
+        Les périphériques se trouvent via NSD (alias Bonjour).\n\n
+        Application publiée sous licence GPL, code source disponible à l\'adresse
+        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+        L\'application utilise JS-Collider (scalable Java NIO framework), visitez
+        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
+        pour plus de détails.
+    </string>
+    <string name="app_name">Talkie Walkie Wifi</string>
+    <string name="back_button_exits">Le bouton retour ferme l\'App</string>
+    <string name="cancel">Annuler</string>
+    <string name="check_wifi_status_on_start">Vérifier l\'état du WiFi au démarrage</string>
+    <string name="close">Fermer</string>
+    <string name="enable">Activer</string>
+    <string name="exit">Quitter</string>
+    <string name="network_initialization_failed">Échec de l\'initialisation du réseau</string>
+    <string name="never_ask_again">Ne plus redemander</string>
+    <string name="nsd_not_found">Service NSD introuvable</string>
+    <string name="push_to_talk">\nPUSH-TO-TALK\n</string>
+    <string name="running">En fonctionnement</string>
+    <string name="set">OK</string>
+    <string name="settings">Préférences</string>
+    <string name="station_name">Nom de la station</string>
+    <string name="system_error">Erreur système</string>
+    <string name="turn_wifi_on">Activer le WiFi</string>
+    <string name="use_volume_buttons_to_talk">Utiliser les boutons de volume pour parler</string>
+    <string name="volume">Volume</string>
+    <string name="wifi_dialog_message">L\'application ne peut voir que les périphériques connectés au même réseau WiFi.</string>
+    <string name="wifi_is_off">Le WiFi est désactivé</string>
+</resources>
