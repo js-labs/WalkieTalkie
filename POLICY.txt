@@ -26,7 +26,7 @@ use third party services that may collect information used to identify you.
 We want to inform you that whenever you use our app, in case of an error in
 the app we collect data and information (through third party products) on your
 device called Log Data. This Log Data may include information such as your
-devices’s Internet Protocol (“IP”) address, device name, operating system
+devices's Internet Protocol ("IP") address, device name, operating system
 version, configuration of the app, the time and date of your use of the app,
 and other statistics.
 
