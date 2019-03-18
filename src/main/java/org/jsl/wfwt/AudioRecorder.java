@@ -81,7 +81,7 @@ public class AudioRecorder implements Runnable
         m_thread = new Thread( this, LOG_TAG + " [" + audioFormat + "]" );
         m_byteBufferCache = new RetainableByteBufferCache(
             /* Take a buffer large enough for 4 audio frame messages */
-            true, 4*Protocol.AudioFrame.getMessageSize(frameSize), 16 );
+            true, 4*Protocol.AudioFrame.getMessageSize(frameSize), Protocol.BYTE_ORDER, 16);
         m_lock = new ReentrantLock();
         m_cond = m_lock.newCondition();
         m_state = IDLE;
@@ -136,7 +136,8 @@ public class AudioRecorder implements Runnable
                             Log.i( LOG_TAG, "Replayed " + replayedFrames + " frames." );
                         }
 
-                        Log.i( LOG_TAG, "Sent " + frames + " frames." );
+                        Log.i( LOG_TAG, "Sent " + frames + " frames, " + (frames*m_frameSize) + " bytes" );
+                        frames = 0;
                         continue;
                     }
                     else if (m_state == SHTDN)

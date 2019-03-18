@@ -39,12 +39,13 @@ public class HandshakeServerSession implements Session.Listener
     private final int m_pingInterval;
     private TimerHandler m_timerHandler;
 
-    private class TimerHandler implements Runnable
+    private class TimerHandler implements TimerQueue.Task
     {
-        public void run()
+        public long run()
         {
-            Log.i( LOG_TAG, getLogPrefix() + "session timeout, close connection." );
+            Log.i(LOG_TAG, getLogPrefix() + "session timeout, close connection.");
             m_session.closeConnection();
+            return 0;
         }
     }
 
@@ -53,14 +54,14 @@ public class HandshakeServerSession implements Session.Listener
         return m_channel.getName() + " " + m_session.getRemoteAddress() + ": ";
     }
 
-    public HandshakeServerSession(
+    HandshakeServerSession(
             String audioFormat,
             String stationName,
             Channel channel,
             Session session,
             SessionManager sessionManager,
             TimerQueue timerQueue,
-            int pingInterval )
+            int pingInterval)
     {
         m_audioFormat = audioFormat;
         m_stationName = stationName;
@@ -70,14 +71,13 @@ public class HandshakeServerSession implements Session.Listener
         m_sessionManager = sessionManager;
         m_timerQueue = timerQueue;
         m_pingInterval = pingInterval;
-
         if (pingInterval > 0)
         {
             m_timerHandler = new TimerHandler();
-            m_timerQueue.schedule( m_timerHandler, pingInterval, TimeUnit.SECONDS );
+            m_timerQueue.schedule(m_timerHandler, pingInterval, TimeUnit.SECONDS);
         }
 
-        Log.i( LOG_TAG, getLogPrefix() + "connection accepted" );
+        Log.i(LOG_TAG, getLogPrefix() + "connection accepted");
     }
 
     public void onDataReceived( RetainableByteBuffer data )

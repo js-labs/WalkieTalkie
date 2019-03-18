@@ -20,6 +20,7 @@ package org.jsl.wfwt;
 
 import org.jsl.collider.RetainableByteBuffer;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
@@ -38,6 +39,7 @@ public class Protocol
     private static final short MSG_STATION_NAME         = 0x0007;
 
     public static final byte VERSION = 1;
+    public static final ByteOrder BYTE_ORDER = ByteOrder.BIG_ENDIAN;
 
     public static class Message
     {
@@ -369,6 +371,5 @@ public class Protocol
             }
             return ret;
         }
-
     }
 }

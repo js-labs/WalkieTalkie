@@ -60,11 +60,19 @@ public class ChannelSession implements Session.Listener
         return m_channel.getName() + " " + m_session.getRemoteAddress() + ": ";
     }
 
-    private class TimerHandler implements Runnable
+    private class TimerHandler implements TimerQueue.Task
     {
-        public void run()
+        private long m_interval;
+
+        TimerHandler(long interval)
+        {
+            m_interval = interval;
+        }
+
+        public long run()
         {
             handlePingTimeout();
+            return m_interval;
         }
     }
 
@@ -153,7 +161,7 @@ public class ChannelSession implements Session.Listener
         };
     }
 
-    public ChannelSession(
+    ChannelSession(
             Channel channel,
             String serviceName,
             Session session,
@@ -161,7 +169,7 @@ public class ChannelSession implements Session.Listener
             SessionManager sessionManager,
             AudioPlayer audioPlayer,
             TimerQueue timerQueue,
-            int pingInterval )
+            int pingInterval)
     {
         m_channel = channel;
         m_serviceName = serviceName;
@@ -173,9 +181,8 @@ public class ChannelSession implements Session.Listener
 
         if (pingInterval > 0)
         {
-            m_timerHandler = new TimerHandler();
-            m_timerQueue.scheduleAtFixedRate(
-                    m_timerHandler, pingInterval, pingInterval, TimeUnit.SECONDS );
+            m_timerHandler = new TimerHandler(TimeUnit.SECONDS.toMillis(pingInterval));
+            m_timerQueue.schedule(m_timerHandler, pingInterval, TimeUnit.SECONDS);
         }
 
         m_sessionManager.addSession( this );

@@ -39,14 +39,15 @@ public class HandshakeClientSession implements Session.Listener
     private final StreamDefragger m_streamDefragger;
     private final TimerQueue m_timerQueue;
     private final int m_pingInterval;
-    private Runnable m_timerHandler;
+    private TimerHandler m_timerHandler;
 
-    private class TimerHandler implements Runnable
+    private class TimerHandler implements TimerQueue.Task
     {
-        public void run()
+        public long run()
         {
-            Log.i( LOG_TAG, getLogPrefix() + "session timeout, close connection." );
+            Log.i(LOG_TAG, getLogPrefix() + "session timeout, close connection.");
             m_session.closeConnection();
+            return 0;
         }
     }
 
@@ -77,7 +78,7 @@ public class HandshakeClientSession implements Session.Listener
         if (pingInterval > 0)
         {
             m_timerHandler = new TimerHandler();
-            timerQueue.schedule( m_timerHandler, pingInterval, TimeUnit.SECONDS );
+            timerQueue.schedule(m_timerHandler, pingInterval, TimeUnit.SECONDS);
         }
 
         try
