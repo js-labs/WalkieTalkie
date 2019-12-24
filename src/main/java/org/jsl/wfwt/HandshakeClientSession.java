@@ -129,8 +129,8 @@ public class HandshakeClientSession implements Session.Listener
         }
         else
         {
-            final int messageID = Protocol.Message.getID( msg );
-            if (messageID == Protocol.HandshakeReplyOk.ID)
+            final int messageId = Protocol.Message.getMessageId(msg);
+            if (messageId == Protocol.HandshakeReplyOk.ID)
             {
                 try
                 {
@@ -162,7 +162,7 @@ public class HandshakeClientSession implements Session.Listener
                     m_session.closeConnection();
                 }
             }
-            else if (messageID == Protocol.HandshakeReplyFail.ID)
+            else if (messageId == Protocol.HandshakeReplyFail.ID)
             {
                 String statusText = null;
                 try
@@ -179,7 +179,7 @@ public class HandshakeClientSession implements Session.Listener
             else
             {
                 Log.i( LOG_TAG, getLogPrefix() +
-                        "unexpected message " + messageID + " received from " +
+                        "unexpected message " + messageId + " received from " +
                         m_session.getRemoteAddress() + ", close connection." );
                 m_session.closeConnection();
             }

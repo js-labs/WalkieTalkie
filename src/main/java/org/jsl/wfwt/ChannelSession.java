@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 public class ChannelSession implements Session.Listener
 {
     private static final String LOG_TAG = "ChannelSession";
+    private static final int PING_TIME_BUFFER_SIZE = 8;
+    private static final long PING_THRESHOLD = 10;
 
     private static final AtomicIntegerFieldUpdater<ChannelSession>
             s_totalBytesReceivedUpdater = AtomicIntegerFieldUpdater.newUpdater(
@@ -50,7 +52,8 @@ public class ChannelSession implements Session.Listener
     private volatile int m_totalBytesReceived;
     private int m_lastBytesReceived;
     private int m_pingTimeouts;
-    private long m_pingSendTime;
+    private int m_pingId;
+    private long [] m_pingSendTime;
     private long m_ping;
 
     private boolean m_sendAudioFrame;
@@ -82,7 +85,7 @@ public class ChannelSession implements Session.Listener
         {
             if (++m_pingTimeouts == 10)
             {
-                Log.i( LOG_TAG, getLogPrefix() + "connection timeout, closing connection." );
+                Log.i(LOG_TAG, getLogPrefix() + "ping timeout, close connection.");
                 m_session.closeConnection();
             }
         }
@@ -92,55 +95,76 @@ public class ChannelSession implements Session.Listener
             m_pingTimeouts = 0;
         }
 
-        Log.v( LOG_TAG, getLogPrefix() + "ping" );
-        m_pingSendTime = System.currentTimeMillis();
-        m_session.sendData( Protocol.Ping.create() );
+        m_pingId = ((m_pingId + 1) & Integer.MAX_VALUE);
+        final int idx = (m_pingId % m_pingSendTime.length);
+        final ByteBuffer msg = Protocol.Ping.create(m_pingId);
+        m_pingSendTime[idx] = System.currentTimeMillis();
+        m_session.sendData(msg);
     }
 
-    private void handleMessage( RetainableByteBuffer msg )
+    private void handlePing(RetainableByteBuffer msg)
     {
-        final short messageID = Protocol.Message.getID( msg );
+        final int id = Protocol.Ping.getId(msg);
+        final ByteBuffer pong = Protocol.Pong.create(id);
+        m_session.sendData(pong);
+    }
+
+    private void handlePong(RetainableByteBuffer msg)
+    {
+        final int id = Protocol.Pong.getId(msg);
+        final int idx = (id % m_pingSendTime.length);
+        final long ping = (System.currentTimeMillis() - m_pingSendTime[idx]) / 2;
+        if (Math.abs(ping - m_ping) > PING_THRESHOLD)
+        {
+            m_ping = ping;
+            m_channel.setPing(m_serviceName, this, ping);
+        }
+    }
+
+    private void handleStationName(RetainableByteBuffer msg)
+    {
+        try
+        {
+            final String stationName = Protocol.StationName.getStationName(msg);
+            if (stationName.length() > 0)
+            {
+                if (m_serviceName == null)
+                    m_channel.setStationName(this, stationName);
+                else
+                    m_channel.setStationName(m_serviceName, stationName);
+            }
+        }
+        catch (final CharacterCodingException ex)
+        {
+            Log.w(LOG_TAG, ex.toString(), ex);
+        }
+    }
+
+    private void handleMessage(RetainableByteBuffer msg)
+    {
+        final short messageID = Protocol.Message.getMessageId(msg);
         switch (messageID)
         {
             case Protocol.AudioFrame.ID:
-                final RetainableByteBuffer audioFrame = Protocol.AudioFrame.getAudioData( msg );
-                m_audioPlayer.play( audioFrame );
+                final RetainableByteBuffer audioFrame = Protocol.AudioFrame.getAudioData(msg);
+                m_audioPlayer.play(audioFrame);
                 audioFrame.release();
             break;
 
             case Protocol.Ping.ID:
-                m_session.sendData( Protocol.Pong.create() );
+                handlePing(msg);
             break;
 
             case Protocol.Pong.ID:
-                final long ping = (System.currentTimeMillis() - m_pingSendTime) / 2;
-                if (Math.abs(ping - m_ping) > 10)
-                {
-                    m_ping = ping;
-                    m_channel.setPing( m_serviceName, this, ping );
-                }
+                handlePong(msg);
             break;
 
             case Protocol.StationName.ID:
-                try
-                {
-                    final String stationName = Protocol.StationName.getStationName( msg );
-                    if (stationName.length() > 0)
-                    {
-                        if (m_serviceName == null)
-                            m_channel.setStationName( this, stationName );
-                        else
-                            m_channel.setStationName( m_serviceName, stationName );
-                    }
-                }
-                catch (final CharacterCodingException ex)
-                {
-                    Log.w( LOG_TAG, ex.toString(), ex );
-                }
+                handleStationName(msg);
             break;
 
             default:
-                Log.w( LOG_TAG, getLogPrefix() + "unexpected message " + messageID );
+                Log.w(LOG_TAG, getLogPrefix() + "unexpected message " + messageID);
             break;
         }
     }
@@ -181,11 +205,12 @@ public class ChannelSession implements Session.Listener
 
         if (pingInterval > 0)
         {
+            m_pingSendTime = new long[PING_TIME_BUFFER_SIZE];
             m_timerHandler = new TimerHandler(TimeUnit.SECONDS.toMillis(pingInterval));
             m_timerQueue.schedule(m_timerHandler, pingInterval, TimeUnit.SECONDS);
         }
 
-        m_sessionManager.addSession( this );
+        m_sessionManager.addSession(this);
         // FIXME: check for possible message in the streamDefragger
     }
 

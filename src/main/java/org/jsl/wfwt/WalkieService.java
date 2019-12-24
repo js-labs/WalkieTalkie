@@ -43,9 +43,9 @@ public class WalkieService extends Service
 {
     private static final String LOG_TAG = WalkieService.class.getSimpleName();
 
-    public static final String SERVICE_TYPE = "_wfwt._tcp"; /* WiFi Walkie Talkie */
-    public static final String SERVICE_NAME = "Channel_00";
-    public static final String SERVICE_NAME_SEPARATOR = ":";
+    private static final String SERVICE_TYPE = "_wfwt._tcp"; /* WiFi Walkie Talkie */
+    private static final String SERVICE_NAME = "Channel_00";
+    static final String SERVICE_NAME_SEPARATOR = ":";
 
     private NsdManager m_nsdManager;
     private AudioRecorder m_audioRecorder;

@@ -21,5 +21,5 @@ package org.jsl.wfwt;
 
 class Config
 {
-    public static int PING_INTERVAL = 5;
+    public static int PING_INTERVAL = 2;
 }

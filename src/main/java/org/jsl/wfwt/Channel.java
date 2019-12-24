@@ -158,15 +158,17 @@ class Channel
 
                     for (Map.Entry<String, ServiceInfo> entry : m_serviceInfo.entrySet())
                     {
+                        final ServiceInfo serviceInfo = entry.getValue();
                         if (m_serviceName.compareTo(entry.getKey()) > 0)
                         {
-                            final ServiceInfo serviceInfo = entry.getValue();
-                            Log.i( LOG_TAG, m_name + ": resolve service: " + serviceInfo.nsdServiceInfo );
+                            Log.i(LOG_TAG, m_name + ": resolve service: " + serviceInfo.nsdServiceInfo);
                             serviceInfo.nsdUpdates = 0;
-                            m_resolveListener = new ResolveListener( entry.getKey() );
-                            m_nsdManager.resolveService( serviceInfo.nsdServiceInfo, m_resolveListener );
+                            m_resolveListener = new ResolveListener(entry.getKey());
+                            m_nsdManager.resolveService(serviceInfo.nsdServiceInfo, m_resolveListener);
                             break;
                         }
+                        else
+                            Log.i(LOG_TAG, m_name + ": waiting connection from " + serviceInfo.nsdServiceInfo);
                     }
 
                     final StateListener stateListener = m_stateListener;

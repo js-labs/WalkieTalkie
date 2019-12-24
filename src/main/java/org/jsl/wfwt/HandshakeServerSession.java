@@ -117,7 +117,7 @@ public class HandshakeServerSession implements Session.Listener
                 }
             }
 
-            final short messageID = Protocol.Message.getID( msg );
+            final short messageID = Protocol.Message.getMessageId(msg);
             if (messageID == Protocol.HandshakeRequest.ID)
             {
                 final short protocolVersion = Protocol.HandshakeRequest.getProtocolVersion(msg);

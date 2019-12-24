@@ -38,7 +38,7 @@ public class Protocol
     private static final short MSG_PONG                 = 0x0006;
     private static final short MSG_STATION_NAME         = 0x0007;
 
-    public static final byte VERSION = 1;
+    public static final byte VERSION = 2;
     public static final ByteOrder BYTE_ORDER = ByteOrder.BIG_ENDIAN;
 
     public static class Message
@@ -53,31 +53,31 @@ public class Protocol
             return byteBuffer;
         }
 
-        public static ByteBuffer create( short type, short extSize )
+        public static ByteBuffer create(short type, short dataSize)
         {
-            if ((HEADER_SIZE + extSize) > Short.MAX_VALUE)
+            if ((HEADER_SIZE + dataSize) > Short.MAX_VALUE)
                 throw new InvalidParameterException();
-            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect( HEADER_SIZE + extSize );
-            return init( byteBuffer, (short) (HEADER_SIZE + extSize), type );
+            final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(HEADER_SIZE + dataSize);
+            return init(byteBuffer, (short) (HEADER_SIZE + dataSize), type);
         }
 
-        public static RetainableByteBuffer createEx( short type, short extSize )
+        public static RetainableByteBuffer createEx(short type, short dataSize)
         {
-            if ((HEADER_SIZE + extSize) > Short.MAX_VALUE)
+            if ((HEADER_SIZE + dataSize) > Short.MAX_VALUE)
                 throw new InvalidParameterException();
-            final RetainableByteBuffer byteBuffer = RetainableByteBuffer.allocateDirect( HEADER_SIZE + extSize );
-            init( byteBuffer.getNioByteBuffer(), (short) (HEADER_SIZE + extSize), type );
+            final RetainableByteBuffer byteBuffer = RetainableByteBuffer.allocateDirect(HEADER_SIZE + dataSize);
+            init(byteBuffer.getNioByteBuffer(), (short) (HEADER_SIZE +dataSize), type);
             return byteBuffer;
         }
 
-        public static int getLength( ByteBuffer msg )
+        public static int getLength(ByteBuffer msg)
         {
-            return msg.getShort( msg.position() );
+            return msg.getShort(msg.position());
         }
 
-        public static short getID( RetainableByteBuffer msg )
+        public static short getMessageId(RetainableByteBuffer msg)
         {
-            return msg.getShort( msg.position() + 2 );
+            return msg.getShort(msg.position() + 2);
         }
     }
 
@@ -301,37 +301,43 @@ public class Protocol
 
     public static class Ping extends Message
     {
-        public static final short ID = MSG_PING;
-        private static final ByteBuffer s_msg = create_i();
+        /* int : id */
+        static final short ID = MSG_PING;
 
-        private static ByteBuffer create_i()
+        public static ByteBuffer create(int id)
         {
-            final ByteBuffer msg = create( ID, (short)0 );
+            final short dataSize = (Integer.SIZE / Byte.SIZE);
+            final ByteBuffer msg = create(MSG_PING, dataSize);
+            msg.putInt(id);
             msg.rewind();
             return msg;
         }
 
-        public static ByteBuffer create()
+        public static int getId(RetainableByteBuffer msg)
         {
-            return s_msg.duplicate();
+            final int pos = msg.position();
+            return msg.getInt(pos + HEADER_SIZE);
         }
     }
 
     public static class Pong extends Message
     {
-        public static final short ID = MSG_PONG;
-        private static final ByteBuffer s_msg = create_i();
+        /* int : id */
+        static final short ID = MSG_PONG;
 
-        private static ByteBuffer create_i()
+        public static ByteBuffer create(int id)
         {
-            final ByteBuffer msg = create( ID, (short)0 );
+            final short dataSize = (Integer.SIZE / Byte.SIZE);
+            final ByteBuffer msg = create(MSG_PONG, dataSize);
+            msg.putInt(id);
             msg.rewind();
             return msg;
         }
 
-        public static ByteBuffer create()
+        public static int getId(RetainableByteBuffer msg)
         {
-            return s_msg.duplicate();
+            final int pos = msg.position();
+            return msg.getInt(pos + HEADER_SIZE);
         }
     }
 
