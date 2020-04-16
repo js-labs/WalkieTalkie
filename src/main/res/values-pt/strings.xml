@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="_colon"> : </string>
+    <string name="about">Acerca de</string>
+    <string name="about_text">
+        Este programa transmite o som gravado pelo microfone para outros aparelhos
+        que executam o mesmo programa. Ela funciona como um rádio Walkie-talkie.\n\n
+        Os aparelhos são descobertos por NSD (alias Bonjour).\n\n
+        Programa publicado sob licença GPL, código fonte disponível no endereço
+        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+        O programa utiliza JS-Collider (scalable Java NIO framework), visite
+        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
+        para mais informações.
+    </string>
+    <string name="app_name">Talkie Walkie Wifi</string>
+    <string name="back_button_exits">O botão voltar fecha o applicativo</string>
+    <string name="cancel">Cancelar</string>
+    <string name="check_wifi_status_on_start">Verificar o estado do WiFi ao iniciar</string>
+    <string name="close">Fechar</string>
+    <string name="enable">Ligar</string>
+    <string name="exit">Sair</string>
+    <string name="network_initialization_failed">Erro ao arrancar a rede</string>
+    <string name="never_ask_again">Não voltar a perguntar</string>
+    <string name="nsd_not_found">Serviço NSD não disponível</string>
+    <string name="push_to_talk">\nCARREGAR-PARA-FALAR\n</string>
+    <string name="running">Em funcionamento</string>
+    <string name="set">OK</string>
+    <string name="settings">Preferencias</string>
+    <string name="station_name">Nome do aparelho</string>
+    <string name="system_error">Erro sistema</string>
+    <string name="turn_wifi_on">Ligar o WiFi</string>
+    <string name="use_volume_buttons_to_talk">Utilizar os botões do volume para falar</string>
+    <string name="volume">Volume</string>
+    <string name="wifi_dialog_message">O programa só pode ver os aparelhos ligados à mesma rede WiFi.</string>
+    <string name="wifi_is_off">O WiFi está desligado</string>
+</resources>
