@@ -117,7 +117,7 @@ public class ChannelSession implements Session.Listener
         if (Math.abs(ping - m_ping) > PING_THRESHOLD)
         {
             m_ping = ping;
-            m_channel.setPing(m_serviceName, this, ping);
+            m_channel.setPing(m_serviceName, m_session, ping);
         }
     }
 
@@ -127,12 +127,7 @@ public class ChannelSession implements Session.Listener
         {
             final String stationName = Protocol.StationName.getStationName(msg);
             if (stationName.length() > 0)
-            {
-                if (m_serviceName == null)
-                    m_channel.setStationName(this, stationName);
-                else
-                    m_channel.setStationName(m_serviceName, stationName);
-            }
+                m_channel.setStationName(m_serviceName, m_session, stationName);
         }
         catch (final CharacterCodingException ex)
         {
@@ -169,7 +164,7 @@ public class ChannelSession implements Session.Listener
         }
     }
 
-    public static StreamDefragger createStreamDefragger()
+    static StreamDefragger createStreamDefragger()
     {
         return new StreamDefragger( Protocol.Message.HEADER_SIZE )
         {
@@ -254,29 +249,24 @@ public class ChannelSession implements Session.Listener
             m_timerHandler = null;
         }
 
-        m_channel.removeSession( m_serviceName, this );
-        m_sessionManager.removeSession( this );
+        m_channel.removeSession(m_serviceName, m_session);
+        m_sessionManager.removeSession(this);
         m_audioPlayer.stopAndWait();
         m_streamDefragger.close();
     }
 
-    public final int sendMessage( RetainableByteBuffer msg )
-    {
-        return m_session.sendData( msg );
-    }
-
-    public final void sendAudioFrame( RetainableByteBuffer audioFrame, boolean ptt )
+    final void sendAudioFrame(RetainableByteBuffer audioFrame, boolean ptt)
     {
         if (ptt || m_sendAudioFrame)
             m_session.sendData( audioFrame );
     }
 
-    public final void setSendAudioFrame( boolean sendAudioFrame )
+    final void setSendAudioFrame(boolean sendAudioFrame)
     {
         m_sendAudioFrame = sendAudioFrame;
     }
 
-    public SocketAddress getRemoteAddress()
+    SocketAddress getRemoteAddress()
     {
         return m_session.getRemoteAddress();
     }

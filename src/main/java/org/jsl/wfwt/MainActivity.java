@@ -97,16 +97,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         private final StringBuilder m_stringBuilder;
         private StationInfo [] m_stationInfo;
 
-        public ListViewAdapter( MainActivity activity )
+        ListViewAdapter(MainActivity activity)
         {
-            super( activity, R.layout.list_view_row );
+            super(activity, R.layout.list_view_row);
             m_activity = activity;
-            m_inflater = (LayoutInflater) activity.getSystemService( LAYOUT_INFLATER_SERVICE );
+            m_inflater = (LayoutInflater) activity.getSystemService(LAYOUT_INFLATER_SERVICE);
             m_stringBuilder = new StringBuilder();
             m_stationInfo = new StationInfo[0];
         }
 
-        public void setStationInfo( StationInfo [] stationInfo )
+        void setStationInfo(StationInfo [] stationInfo)
         {
             m_stationInfo = stationInfo;
             notifyDataSetChanged();
@@ -134,17 +134,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             final StationInfo stationInfo = m_stationInfo[position];
 
             m_stringBuilder.setLength(0);
-            m_stringBuilder.append( stationInfo.addr );
+            m_stringBuilder.append(stationInfo.addr);
             final long ping = stationInfo.ping;
             if (ping > 0)
             {
-                m_stringBuilder.append( ", " );
-                m_stringBuilder.append( stationInfo.ping );
-                m_stringBuilder.append( " ms" );
+                m_stringBuilder.append(", ");
+                m_stringBuilder.append(stationInfo.ping);
+                m_stringBuilder.append(" ms");
             }
 
-            rowView.setData( position, stationInfo.name, m_stringBuilder.toString(), stationInfo.transmission );
-
+            rowView.setData(position, stationInfo.name, m_stringBuilder.toString(), stationInfo.transmission);
             return rowView;
         }
     }
@@ -214,19 +213,19 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         }
     }
 
-    public void onListViewItemPressed( int position, boolean pressed )
+    void onListViewItemPressed(int position, boolean pressed)
     {
-        final StationInfo stationInfo = m_listViewAdapter.getItem( position );
+        final StationInfo stationInfo = m_listViewAdapter.getItem(position);
         if (pressed)
         {
-            stationInfo.session.setSendAudioFrame( true );
+            stationInfo.channelSession.setSendAudioFrame(true);
             final int receivers = m_receivers++;
             if (!m_ptt && (receivers == 0))
-                m_audioRecorder.startRecording( false );
+                m_audioRecorder.startRecording(false);
         }
         else
         {
-            stationInfo.session.setSendAudioFrame( false );
+            stationInfo.channelSession.setSendAudioFrame(false);
             final int receivers = --m_receivers;
             if (!m_ptt && (receivers == 0))
                 m_audioRecorder.stopRecording();
@@ -235,16 +234,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
     /* WalkieService.StateListener interface implementation */
 
-    public void onInit( final AudioRecorder audioRecorder )
+    public void onInit(final AudioRecorder audioRecorder)
     {
-        Log.d( LOG_TAG, "onInit" );
+        Log.d(LOG_TAG, "onInit");
         if (audioRecorder != null)
         {
             runOnUiThread( new Runnable() {
                 public void run() {
                     m_audioRecorder = audioRecorder;
-                    m_buttonTalk.setStateListener( new ButtonTalkListener() );
-                    m_buttonTalk.setEnabled( true );
+                    m_buttonTalk.setStateListener(new ButtonTalkListener());
+                    m_buttonTalk.setEnabled(true);
                 }
             } );
         }
@@ -252,25 +251,25 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
     /* Channel.StateListener interface implementation */
 
-    public void onStateChanged( final String stateString, final boolean registered )
+    public void onStateChanged(final String stateString, final boolean registered)
     {
-        Log.d( LOG_TAG, "onStateChanged: " + stateString );
+        Log.d(LOG_TAG, "onStateChanged: " + stateString);
         runOnUiThread( new Runnable() {
             public void run() {
-                final TextView textView = (TextView) findViewById( R.id.textViewStatus );
-                textView.setText( stateString );
-                textView.setTextColor( (registered ? Color.GREEN : Color.GRAY) );
+                final TextView textView = (TextView) findViewById(R.id.textViewStatus);
+                textView.setText(stateString);
+                textView.setTextColor((registered ? Color.GREEN : Color.GRAY));
             }
         });
     }
 
-    public void onStationListChanged( final StationInfo [] stationInfo )
+    public void onStationListChanged(final StationInfo [] stationInfo)
     {
         runOnUiThread( new Runnable() {
             public void run() {
-                m_listViewAdapter.setStationInfo( stationInfo );
+                m_listViewAdapter.setStationInfo(stationInfo);
             }
-        } );
+        });
     }
 
     public void onCreate( Bundle savedInstanceState )

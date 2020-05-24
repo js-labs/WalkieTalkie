@@ -128,33 +128,33 @@ public class HandshakeServerSession implements Session.Listener
                         final String audioFormat = Protocol.HandshakeRequest.getAudioFormat( msg );
                         final String stationName = Protocol.HandshakeRequest.getStationName( msg );
                         final AudioPlayer audioPlayer = AudioPlayer.create(
-                                getLogPrefix(), audioFormat, m_channel, null, m_session );
+                                getLogPrefix(), audioFormat, m_channel, null, m_session);
                         if (audioPlayer == null)
                         {
-                            Log.i( LOG_TAG, getLogPrefix() +
-                                    "unsupported audio format '" + audioFormat + "', closing connection." );
+                            Log.i(LOG_TAG, getLogPrefix() +
+                                    "unsupported audio format '" + audioFormat + "', closing connection.");
                             m_session.closeConnection();
                         }
                         else
                         {
-                            Log.i( LOG_TAG, getLogPrefix() + "handshake ok" );
+                            Log.i(LOG_TAG, getLogPrefix() + "handshake ok");
 
                             /* Send reply first to be sure other side will receive
                              * HandshakeReplyOk before anything else.
                              */
-                            final ByteBuffer handshakeReply = Protocol.HandshakeReplyOk.create( m_audioFormat, m_stationName );
+                            final ByteBuffer handshakeReply = Protocol.HandshakeReplyOk.create(m_audioFormat, m_stationName);
                             m_session.sendData( handshakeReply );
 
                             final ChannelSession channelSession = new ChannelSession(
-                                    m_channel, null, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval );
+                                    m_channel, null, m_session, m_streamDefragger, m_sessionManager, audioPlayer, m_timerQueue, m_pingInterval);
 
-                            m_channel.addSession( channelSession, stationName );
-                            m_session.replaceListener( channelSession );
+                            m_channel.addSession(m_session, channelSession, stationName);
+                            m_session.replaceListener(channelSession);
                         }
                     }
                     catch (final CharacterCodingException ex)
                     {
-                        Log.e( LOG_TAG, getLogPrefix() + ex.toString(), ex );
+                        Log.e(LOG_TAG, getLogPrefix() + ex.toString(), ex);
                         m_session.closeConnection();
                     }
                 }

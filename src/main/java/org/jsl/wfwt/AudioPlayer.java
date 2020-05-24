@@ -35,17 +35,17 @@ public abstract class AudioPlayer
     private static final String LOG_TAG = AudioPlayer.class.getSimpleName();
 
     private static final AtomicReferenceFieldUpdater<Node, Node> s_nodeNextUpdater
-            = AtomicReferenceFieldUpdater.newUpdater( Node.class, Node.class, "next" );
+            = AtomicReferenceFieldUpdater.newUpdater( Node.class, Node.class, "next");
 
     private static final AtomicReferenceFieldUpdater<Impl, Node> s_tailUpdater
-            = AtomicReferenceFieldUpdater.newUpdater( Impl.class, Node.class, "m_tail" );
+            = AtomicReferenceFieldUpdater.newUpdater( Impl.class, Node.class, "m_tail");
 
     private static class Node
     {
         public volatile Node next;
-        public final RetainableByteBuffer audioFrame;
+        final RetainableByteBuffer audioFrame;
 
-        public Node( RetainableByteBuffer audioFrame )
+        Node( RetainableByteBuffer audioFrame )
         {
             this.audioFrame = audioFrame;
         }
@@ -53,13 +53,13 @@ public abstract class AudioPlayer
 
     private static abstract class Impl extends AudioPlayer implements Runnable
     {
-        protected final String m_logPrefix;
-        protected final Thread m_thread;
-        protected final Semaphore m_sema;
-        protected Node m_head;
-        private volatile Node m_tail;
+        final String m_logPrefix;
+        final Thread m_thread;
+        final Semaphore m_sema;
+        Node m_head;
+        volatile Node m_tail;
 
-        protected Impl( String logPrefix )
+        Impl( String logPrefix )
         {
             m_logPrefix = logPrefix;
             m_thread = new Thread( this, LOG_TAG );
@@ -156,7 +156,7 @@ public abstract class AudioPlayer
         private final int m_sampleSize;
         private final int m_sampleRate;
 
-        public PcmImpl(
+        PcmImpl(
                 String logPrefix,
                 AudioTrack audioTrack,
                 Channel channel,
@@ -269,7 +269,7 @@ public abstract class AudioPlayer
         }
     }
 
-    public static AudioPlayer create(
+    static AudioPlayer create(
             String logPrefix,
             String audioFormat,
             Channel channel,

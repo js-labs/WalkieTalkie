@@ -21,15 +21,15 @@ package org.jsl.wfwt;
 import org.jsl.collider.RetainableByteBuffer;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class SessionManager
+class SessionManager
 {
     private static final class Node
     {
-        public volatile Node prev;
-        public volatile Node next;
-        public final ChannelSession session;
+        volatile Node prev;
+        volatile Node next;
+        final ChannelSession session;
 
-        public Node(ChannelSession session)
+        Node(ChannelSession session)
         {
             this.session = session;
         }
@@ -43,12 +43,12 @@ public class SessionManager
     private volatile Node m_head;
     private volatile Node m_tail;
 
-    public SessionManager()
+    SessionManager()
     {
         m_lock = new ReentrantLock();
     }
 
-    public void addSession( ChannelSession channelSession )
+    void addSession( ChannelSession channelSession )
     {
         m_lock.lock();
         try
@@ -80,7 +80,7 @@ public class SessionManager
         }
     }
 
-    public void removeSession( ChannelSession channelSession )
+    void removeSession(ChannelSession channelSession)
     {
         m_lock.lock();
         try
@@ -150,7 +150,7 @@ public class SessionManager
         }
     }
 
-    public void sendAudioFrame( RetainableByteBuffer msg, boolean ptt )
+    void sendAudioFrame(RetainableByteBuffer msg, boolean ptt)
     {
         Node node = m_head;
         while (node != null)

@@ -18,20 +18,20 @@
  */
 package org.jsl.wfwt;
 
-public class StationInfo
+class StationInfo
 {
-    public final String name;
-    public final String addr;
-    public final int transmission;
-    public final long ping;
-    public final ChannelSession session;
+    final String name;
+    final String addr;
+    final int transmission;
+    final long ping;
+    final ChannelSession channelSession;
 
-    public StationInfo( String name, String addr, int transmission, long ping, ChannelSession session )
+    StationInfo(String name, String addr, int transmission, long ping, ChannelSession channelSession)
     {
         this.name = name;
         this.addr = addr;
         this.transmission = transmission;
         this.ping = ping;
-        this.session = session;
+        this.channelSession = channelSession;
     }
 }
