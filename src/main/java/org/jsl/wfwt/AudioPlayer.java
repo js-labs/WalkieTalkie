@@ -40,13 +40,17 @@ public abstract class AudioPlayer
     private static final AtomicReferenceFieldUpdater<Impl, Node> s_tailUpdater
             = AtomicReferenceFieldUpdater.newUpdater( Impl.class, Node.class, "m_tail");
 
+    private enum NodeCommand { NONE, BATCH_START, BATCH_END, STOP }
+
     private static class Node
     {
         public volatile Node next;
+        final NodeCommand cmd;
         final RetainableByteBuffer audioFrame;
 
-        Node( RetainableByteBuffer audioFrame )
+        Node(NodeCommand cmd, RetainableByteBuffer audioFrame)
         {
+            this.cmd = cmd;
             this.audioFrame = audioFrame;
         }
     }
@@ -59,42 +63,21 @@ public abstract class AudioPlayer
         Node m_head;
         volatile Node m_tail;
 
-        Impl( String logPrefix )
+        Impl(String logPrefix)
         {
             m_logPrefix = logPrefix;
-            m_thread = new Thread( this, LOG_TAG );
+            m_thread = new Thread(this, LOG_TAG);
             m_sema = new Semaphore(0);
         }
 
-        protected final Node getNext()
+        private void enqueue(Node node)
         {
-            final Node head = m_head;
-            Node next = m_head.next;
-            if (next == null)
-            {
-                m_head = null;
-                if (s_tailUpdater.compareAndSet(this, head, null))
-                    return null;
-                while ((next = head.next) == null);
-            }
-            s_nodeNextUpdater.lazySet( head, null );
-            m_head = next;
-            return next;
-        }
-
-        public void play( RetainableByteBuffer audioFrame )
-        {
-            final Node node = new Node( audioFrame );
-            audioFrame.retain();
-
             for (;;)
             {
-                final Node tail = m_tail;
-                if (BuildConfig.DEBUG && (tail != null) && (tail.audioFrame == null))
-                {
-                    audioFrame.release();
+                final Node tail = s_tailUpdater.get(this);
+
+                if (BuildConfig.DEBUG && (tail != null) && (tail.cmd == NodeCommand.STOP))
                     throw new AssertionError();
-                }
 
                 if (s_tailUpdater.compareAndSet(this, tail, node))
                 {
@@ -108,42 +91,40 @@ public abstract class AudioPlayer
                     break;
                 }
             }
+        }
+
+        public void play(boolean batchStart, RetainableByteBuffer audioFrame)
+        {
+            final NodeCommand cmd = (batchStart ? NodeCommand.BATCH_START : NodeCommand.NONE);
+            final Node node = new Node(cmd, audioFrame);
+            audioFrame.retain();
+            enqueue(node);
+        }
+
+        public void batchEnd()
+        {
+            final Node node = new Node(NodeCommand.BATCH_END, null);
+            enqueue(node);
         }
 
         public void stopAndWait()
         {
-            final Node node = new Node( null );
-            for (;;)
-            {
-                final Node tail = m_tail;
+            final Node node = new Node(NodeCommand.STOP, null);
+            enqueue(node);
 
-                if (BuildConfig.DEBUG && (tail != null) && (tail.audioFrame == null))
-                {
-                    /* Already stopped?! */
-                    throw new AssertionError();
-                }
-
-                if (s_tailUpdater.compareAndSet(this, tail, node))
-                {
-                    if (tail == null)
-                    {
-                        m_head = node;
-                        m_sema.release();
-                    }
-                    else
-                        tail.next = node;
-                    break;
-                }
-            }
-
+            boolean interrupted = false;
             try
             {
                 m_thread.join();
             }
             catch (final InterruptedException ex)
             {
-                Log.e( LOG_TAG, ex.toString() );
+                Log.e(LOG_TAG, ex.toString());
+                interrupted = true;
             }
+
+            if (interrupted)
+                Thread.currentThread().interrupt();
         }
     }
 
@@ -153,30 +134,40 @@ public abstract class AudioPlayer
         private final Channel m_channel;
         private final String m_serviceName;
         private final Session m_session;
-        private final int m_sampleSize;
-        private final int m_sampleRate;
+        private final int m_bufferSize;
 
-        PcmImpl(
-                String logPrefix,
-                AudioTrack audioTrack,
-                Channel channel,
-                String serviceName,
-                Session session )
+        PcmImpl(String logPrefix, AudioTrack audioTrack, Channel channel, String serviceName, Session session, int bufferSize)
         {
-            super( logPrefix );
+            super(logPrefix);
             m_audioTrack = audioTrack;
             m_channel = channel;
             m_serviceName = serviceName;
             m_session = session;
-            m_sampleSize = ((m_audioTrack.getAudioFormat() == AudioFormat.ENCODING_PCM_8BIT) ? 1 : 2);
-            m_sampleRate = m_audioTrack.getSampleRate();
+            m_bufferSize = bufferSize;
             m_thread.start();
         }
 
         public void run()
         {
-            android.os.Process.setThreadPriority( Process.THREAD_PRIORITY_URGENT_AUDIO );
-            Log.i( LOG_TAG, m_logPrefix + "run start" );
+            android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
+            final int sampleSize = ((m_audioTrack.getAudioFormat() == AudioFormat.ENCODING_PCM_8BIT) ? 1 : 2);
+            final byte [] silenceData = new byte[m_bufferSize*2];
+
+            /*
+            final double C = (m_audioTrack.getSampleRate() / 440.0);
+            for (int idx=0; idx<silenceData.length/2; idx++)
+            {
+                double t = (idx / C * Math.PI);
+                t = Math.sin(t) * Short.MAX_VALUE / 4.0;
+                final byte v1 = (byte) (((int)t) >> 8);
+                final byte v2 = (byte) (((int)t) & 0xFF);
+                silenceData[idx*2] = v2;
+                silenceData[idx*2+1] = v1;
+            }
+            */
+
+            Log.i(LOG_TAG, m_logPrefix + "run start: bufferSize=" + m_bufferSize + " bytes"
+                    + " (" + (m_bufferSize / (Short.SIZE / Byte.SIZE)) + " samples)");
             for (;;)
             {
                 try
@@ -185,61 +176,67 @@ public abstract class AudioPlayer
                 }
                 catch (final InterruptedException ex)
                 {
-                    Log.e( LOG_TAG, ex.toString() );
+                    Log.e(LOG_TAG, ex.toString());
                     break;
                 }
 
-                if (m_head.audioFrame == null)
+                Node node = m_head;
+                if (node.cmd == NodeCommand.STOP)
                     break;
 
-                /* Sleep half frame size before start to reduce playback gaps. */
+                if (BuildConfig.DEBUG && (node.cmd != NodeCommand.BATCH_START))
+                    throw new AssertionError();
 
-                long sleepTime = (m_head.audioFrame.remaining() / m_sampleSize / 2 * 1000 / m_sampleRate);
-                try { Thread.sleep( sleepTime, 0 ); }
-                catch (final InterruptedException ex) { Log.e( LOG_TAG, m_logPrefix + ex.toString() ); }
+                Log.d(LOG_TAG, m_logPrefix + "play");
+                m_channel.setSessionState(m_serviceName, m_session, 1);
 
-                m_channel.setSessionState( m_serviceName, m_session, 1 );
-
+                int samples = 0;
                 int frames = 0;
+
+                // warm up audio player with one silent block
+                int bytes = m_audioTrack.write(silenceData, 0, silenceData.length);
+                samples += (bytes / sampleSize);
+
+                m_audioTrack.play();
+
                 for (;;)
                 {
-                    final Node node = m_head;
-                    if (node.audioFrame == null)
+                    if (node.cmd == NodeCommand.BATCH_END)
                     {
-                        m_sema.release();
-                        break;
-                    }
-
-                    final ByteBuffer byteBuffer = m_head.audioFrame.getNioByteBuffer();
-
-                    /* We expect audio frame completely fill a byte buffer. */
-                    if (BuildConfig.DEBUG && (byteBuffer.position() != 0))
-                        throw new AssertionError();
-
-                    final long startTime = System.currentTimeMillis();
-                    final int bytes = m_audioTrack.write( byteBuffer.array(), byteBuffer.arrayOffset(), byteBuffer.remaining() );
-                    final long writeTime = (System.currentTimeMillis() - startTime);
-                    final long playTime = (byteBuffer.remaining() / m_sampleSize * 1000 / m_sampleRate);
-                    Log.d( LOG_TAG, m_logPrefix + "write()=" + bytes + " writeTime=" + writeTime + " playTime=" + playTime );
-
-                    if (frames++ == 0)
-                    {
-                        m_audioTrack.play();
-                        /* Stupid,
-                         * but it does not play anything if stop() is not called.
-                         */
-                        m_audioTrack.stop();
-                    }
-
-                    if (writeTime < playTime)
-                    {
-                        sleepTime = (playTime - writeTime);
-                        if (sleepTime > 100)
+                        Node next = node.next;
+                        if (next == null)
                         {
-                            try { Thread.sleep( sleepTime-50, 0 ); }
-                            catch (final InterruptedException ex) { Log.e( LOG_TAG, m_logPrefix + ex.toString() ); }
+                            m_head = null;
+                            if (s_tailUpdater.compareAndSet(this, node, null))
+                            {
+                                node = null;
+                                break;
+                            }
+                            while (node.next == null);
+                            next = node.next;
                         }
+                        s_nodeNextUpdater.lazySet(node, null);
+                        node = next;
                     }
+
+                    if (node.cmd == NodeCommand.STOP)
+                        break;
+
+                    final ByteBuffer byteBuffer = node.audioFrame.getNioByteBuffer();
+                    bytes = m_audioTrack.write(byteBuffer.array(), byteBuffer.arrayOffset(), byteBuffer.remaining());
+                    if (bytes > 0)
+                        samples += (bytes / sampleSize);
+
+                    /*
+                    Log.d(LOG_TAG, m_logPrefix
+                            + "byteBuffer=" + byteBuffer.hashCode()
+                            + " size=" + byteBuffer.remaining()
+                            + " bytes=" + bytes
+                            + " samples=" + samples);
+                     */
+
+                    node.audioFrame.release();
+                    frames++;
 
                     Node next = node.next;
                     if (next == null)
@@ -247,25 +244,46 @@ public abstract class AudioPlayer
                         m_head = null;
                         if (s_tailUpdater.compareAndSet(this, node, null))
                         {
-                            assert( node.next == null );
-                            node.audioFrame.release();
-                            break;
+                            // no data to write for now,
+                            // play silence to avoid useless audio stop/start
+                            for (;;)
+                            {
+                                bytes = m_audioTrack.write(silenceData, 0, silenceData.length);
+                                samples += (bytes / sampleSize);
+                                Log.d(LOG_TAG, "add silence, samples=" + samples);
+                                if (m_sema.tryAcquire())
+                                {
+                                    Log.d(LOG_TAG, m_logPrefix + "tryAcquire()=true");
+                                    node = m_head;
+                                    break;
+                                }
+                            }
                         }
-                        while ((next = node.next) == null);
+                        else
+                        {
+                            while (node.next == null);
+                            next = node.next;
+                            s_nodeNextUpdater.lazySet(node, null);
+                            node = next;
+                        }
                     }
-
-                    node.audioFrame.release();
-                    s_nodeNextUpdater.lazySet( node, null );
-
-                    m_head = next;
+                    else
+                    {
+                        s_nodeNextUpdater.lazySet(node, null);
+                        node = next;
+                    }
                 }
 
-                m_channel.setSessionState( m_serviceName, m_session, 0 );
-                Log.d( LOG_TAG, m_logPrefix + "frames=" + frames );
+                m_audioTrack.stop();
+                m_channel.setSessionState(m_serviceName, m_session, 0);
+                Log.d(LOG_TAG, m_logPrefix + "played " + frames + " frames, " + samples + " samples");
+
+                if (node != null) // node.cmd == NodeCommand.STOP
+                    break;
             }
 
             m_audioTrack.release();
-            Log.i( LOG_TAG, m_logPrefix + "run done" );
+            Log.i(LOG_TAG, m_logPrefix + "run done");
         }
     }
 
@@ -283,36 +301,32 @@ public abstract class AudioPlayer
             {
                 if ((ss[0].compareTo("PCM") == 0) && (ss.length > 1))
                 {
-                    final int sampleRate = Integer.parseInt( ss[1] );
+                    final int sampleRate = Integer.parseInt(ss[1]);
 
                     final int minBufferSize = AudioTrack.getMinBufferSize(
-                            sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT );
-
-                    int bufferSize = (sampleRate * (Short.SIZE / Byte.SIZE) * 4);
-                    if (bufferSize < minBufferSize)
-                        bufferSize = minBufferSize;
+                            sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
 
                     final AudioTrack audioTrack = new AudioTrack(
                             AudioManager.STREAM_MUSIC,
                             sampleRate,
                             AudioFormat.CHANNEL_OUT_MONO,
                             AudioFormat.ENCODING_PCM_16BIT,
-                            bufferSize,
-                            AudioTrack.MODE_STREAM );
+                            minBufferSize,
+                            AudioTrack.MODE_STREAM);
 
                     final String playerLogPrefix = (logPrefix + "/" + audioFormat + ": ");
-                    Log.d( LOG_TAG, playerLogPrefix + "bufferSize=" + bufferSize );
-                    return new PcmImpl( playerLogPrefix, audioTrack, channel, serviceName, session );
+                    return new PcmImpl(playerLogPrefix, audioTrack, channel, serviceName, session, minBufferSize);
                 }
             }
         }
         catch (final NumberFormatException ex)
         {
-            Log.e( LOG_TAG, ex.toString() );
+            Log.e(LOG_TAG, ex.toString());
         }
         return null;
     }
 
-    public abstract void play( RetainableByteBuffer audioFrame );
+    public abstract void play(boolean batchStart, RetainableByteBuffer audioFrame);
+    public abstract void batchEnd();
     public abstract void stopAndWait();
 }

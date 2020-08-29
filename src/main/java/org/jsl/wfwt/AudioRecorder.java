@@ -23,7 +23,6 @@ import android.os.Process;
 import android.util.Log;
 import org.jsl.collider.RetainableByteBuffer;
 import org.jsl.collider.RetainableByteBufferCache;
-import java.util.LinkedList;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
@@ -31,19 +30,14 @@ import java.util.logging.Logger;
 public class AudioRecorder implements Runnable
 {
     private static final String LOG_TAG = "AudioRecorder";
-    private static final Logger s_logger = Logger.getLogger( "org.jsl.collider.Collider" );
+    private static final Logger s_logger = Logger.getLogger("org.jsl.wfwt.AudioRecorder");
 
     private final SessionManager m_sessionManager;
     private final String m_audioFormat;
     private final AudioRecord m_audioRecord;
     private final int m_frameSize;
-    private final int m_bufferSize;
-
-    private final AudioPlayer m_audioPlayer;
-    private final LinkedList<RetainableByteBuffer> m_list;
 
     private final Thread m_thread;
-    private final RetainableByteBufferCache m_byteBufferCache;
     private final ReentrantLock m_lock;
     private final Condition m_cond;
     private int m_state;
@@ -55,51 +49,83 @@ public class AudioRecorder implements Runnable
     private static final int STOP  = 3;
     private static final int SHTDN = 4; // shutdown
 
-    private AudioRecorder(
-            SessionManager sessionManager,
-            AudioRecord audioRecord,
-            String audioFormat,
-            int frameSize,
-            int bufferSize,
-            boolean repeat )
+    private static class SendBuffer
+    {
+        private final RetainableByteBufferCache cache;
+        private RetainableByteBuffer byteBuffer;
+        byte [] array;
+        int arrayOffset;
+
+        SendBuffer(int frameSize)
+        {
+            /* Use buffer large enough for 4 audio frame messages */
+            cache = new RetainableByteBufferCache(
+                    true, 4*Protocol.AudioFrame.getMessageSize(frameSize), Protocol.BYTE_ORDER, 8);
+            byteBuffer = cache.get();
+            array = byteBuffer.getNioByteBuffer().array();
+            arrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
+        }
+
+        RetainableByteBuffer getBuffer(int messageSize)
+        {
+            final int position = byteBuffer.position();
+            final int space = (byteBuffer.capacity() - position);
+            if (space < messageSize)
+            {
+                byteBuffer.release();
+                byteBuffer = cache.get();
+                if (BuildConfig.DEBUG && (byteBuffer.position() != 0))
+                    throw new AssertionError();
+                array = byteBuffer.getNioByteBuffer().array();
+                arrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
+            }
+            return byteBuffer;
+        }
+
+        void release()
+        {
+            byteBuffer.release();
+            cache.clear(s_logger);
+        }
+    }
+
+    private void send(RetainableByteBuffer byteBuffer, int position, int messageSize, boolean ptt)
+    {
+        final int limit = (position + messageSize);
+        byteBuffer.position(position);
+        byteBuffer.limit(limit);
+        final RetainableByteBuffer msg = byteBuffer.slice();
+        m_sessionManager.sendAudioFrame(msg, ptt); // FIXME?
+        msg.release();
+        byteBuffer.limit(byteBuffer.capacity());
+        byteBuffer.position(limit);
+    }
+
+    private AudioRecorder(SessionManager sessionManager, AudioRecord audioRecord, String audioFormat, int frameSize)
     {
         m_sessionManager = sessionManager;
         m_audioRecord = audioRecord;
         m_audioFormat = audioFormat;
         m_frameSize = frameSize;
-        m_bufferSize = bufferSize;
-        if (repeat)
-        {
-            m_audioPlayer = null; //AudioPlayer.create( audioFormat, "Repeat" );
-            m_list = new LinkedList<RetainableByteBuffer>();
-        }
-        else
-        {
-            m_audioPlayer = null;
-            m_list = null;
-        }
-        m_thread = new Thread( this, LOG_TAG + " [" + audioFormat + "]" );
-        m_byteBufferCache = new RetainableByteBufferCache(
-            /* Take a buffer large enough for 4 audio frame messages */
-            true, 4*Protocol.AudioFrame.getMessageSize(frameSize), Protocol.BYTE_ORDER, 16);
+        m_thread = new Thread(this, LOG_TAG + " [" + audioFormat + "]");
         m_lock = new ReentrantLock();
         m_cond = m_lock.newCondition();
         m_state = IDLE;
         m_thread.start();
     }
 
-    public String getAudioFormat()
+    String getAudioFormat()
     {
         return m_audioFormat;
     }
 
     public void run()
     {
-        Log.i( LOG_TAG, "run [" + m_audioFormat + "]: frameSize=" + m_frameSize + " bufferSize=" + m_bufferSize );
-        android.os.Process.setThreadPriority( Process.THREAD_PRIORITY_URGENT_AUDIO );
-        RetainableByteBuffer byteBuffer = m_byteBufferCache.get();
-        byte [] byteBufferArray = byteBuffer.getNioByteBuffer().array();
-        int byteBufferArrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
+        final int frameSize = m_frameSize;
+        Log.i(LOG_TAG, "run [" + m_audioFormat + "]: frameSize=" + frameSize);
+        android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
+
+        final SendBuffer sendBuffer = new SendBuffer(frameSize);
         boolean interrupted = false;
         boolean ptt;
         int frames = 0;
@@ -123,20 +149,12 @@ public class AudioRecorder implements Runnable
                         m_audioRecord.stop();
                         m_state = IDLE;
 
-                        if (m_list != null)
-                        {
-                            int replayedFrames = 0;
-                            for (RetainableByteBuffer msg : m_list)
-                            {
-                                m_audioPlayer.play( msg );
-                                msg.release();
-                                replayedFrames++;
-                            }
-                            m_list.clear();
-                            Log.i( LOG_TAG, "Replayed " + replayedFrames + " frames." );
-                        }
-
-                        Log.i( LOG_TAG, "Sent " + frames + " frames, " + (frames*m_frameSize) + " bytes" );
+                        final int messageSize = Protocol.AudioFrame.getMessageSize(0);
+                        final RetainableByteBuffer byteBuffer = sendBuffer.getBuffer(messageSize);
+                        final int position = byteBuffer.position();
+                        Protocol.AudioFrame.init(byteBuffer.getNioByteBuffer(), /*batch start*/false, 0);
+                        send(byteBuffer, position, messageSize, /*ptt*/true); // FIXME?
+                        Log.i(LOG_TAG, "Sent " + frames + " frames, " + (frames*m_frameSize) + " bytes");
                         frames = 0;
                         continue;
                     }
@@ -150,62 +168,37 @@ public class AudioRecorder implements Runnable
                     m_lock.unlock();
                 }
 
-                int position = byteBuffer.position();
-                if ((byteBuffer.limit() - position) < Protocol.AudioFrame.getMessageSize(m_frameSize))
-                {
-                    byteBuffer.release();
-                    byteBuffer = m_byteBufferCache.get();
-                    byteBufferArray = byteBuffer.getNioByteBuffer().array();
-                    byteBufferArrayOffset = byteBuffer.getNioByteBuffer().arrayOffset();
-                    position = 0;
+                final int messageSize = Protocol.AudioFrame.getMessageSize(frameSize);
+                final RetainableByteBuffer byteBuffer = sendBuffer.getBuffer(messageSize);
+                final int position = byteBuffer.position();
 
-                    if (BuildConfig.DEBUG && (byteBuffer.position() != position))
-                        throw new AssertionError();
-                }
-
-                Protocol.AudioFrame.init( byteBuffer.getNioByteBuffer(), m_frameSize );
-                if (BuildConfig.DEBUG && (byteBuffer.remaining() < m_frameSize))
+                Protocol.AudioFrame.init(byteBuffer.getNioByteBuffer(), /*batch start*/(frames == 0), frameSize);
+                if (BuildConfig.DEBUG && (byteBuffer.remaining() < frameSize))
                     throw new AssertionError();
 
                 final int bytesReady = m_audioRecord.read(
-                        byteBufferArray, byteBufferArrayOffset+byteBuffer.position(), m_frameSize );
-                if (bytesReady == m_frameSize)
+                        sendBuffer.array, sendBuffer.arrayOffset+byteBuffer.position(), frameSize);
+
+                if (bytesReady == frameSize)
                 {
-                    final int limit = position + Protocol.AudioFrame.getMessageSize( m_frameSize );
-                    byteBuffer.position( position );
-                    byteBuffer.limit( limit );
-                    final RetainableByteBuffer msg = byteBuffer.slice();
-                    m_sessionManager.sendAudioFrame( msg, ptt );
+                    send(byteBuffer, position, messageSize, ptt);
                     frames++;
-
-                    if (m_list != null)
-                    {
-                        /* Audio player expects just an audio frame
-                         * without message header.
-                         */
-                        m_list.add( Protocol.AudioFrame.getAudioData(msg) );
-                    }
-
-                    msg.release();
-                    byteBuffer.limit( byteBuffer.capacity() );
-                    byteBuffer.position( limit );
                 }
                 else
                 {
-                    Log.e( LOG_TAG, "readSize=" + m_frameSize + " bytesReady=" + bytesReady );
+                    Log.e(LOG_TAG, "readSize=" + frameSize + " bytesReady=" + bytesReady);
                     break;
                 }
             }
         }
         catch (final InterruptedException ex)
         {
-            Log.e( LOG_TAG, ex.toString(), ex );
+            Log.e(LOG_TAG, ex.toString(), ex);
             interrupted = true;
         }
 
-        m_audioRecord.stop();
         m_audioRecord.release();
-        byteBuffer.release();
+        sendBuffer.release();
 
         Log.i( LOG_TAG, "run [" + m_audioFormat + "]: done" );
 
@@ -213,7 +206,7 @@ public class AudioRecorder implements Runnable
             Thread.currentThread().interrupt();
     }
 
-    public void setPTT( boolean ptt )
+    void setPTT(boolean ptt)
     {
         m_lock.lock();
         try
@@ -228,9 +221,9 @@ public class AudioRecorder implements Runnable
         }
     }
 
-    public void startRecording( boolean ptt )
+    void startRecording(boolean ptt)
     {
-        Log.d( LOG_TAG, "startRecording" );
+        Log.d(LOG_TAG, "startRecording");
         m_lock.lock();
         try
         {
@@ -249,9 +242,9 @@ public class AudioRecorder implements Runnable
         }
     }
 
-    public void stopRecording()
+    void stopRecording()
     {
-        Log.d( LOG_TAG, "stopRecording" );
+        Log.d(LOG_TAG, "stopRecording");
         m_lock.lock();
         try
         {
@@ -264,7 +257,7 @@ public class AudioRecorder implements Runnable
         }
     }
 
-    public void shutdown()
+    void shutdown()
     {
         Log.d( LOG_TAG, "shutdown" );
         m_lock.lock();
@@ -279,37 +272,34 @@ public class AudioRecorder implements Runnable
             m_lock.unlock();
         }
 
+        boolean interrupted = false;
         try
         {
             m_thread.join();
         }
         catch (final InterruptedException ex)
         {
-            Log.e( LOG_TAG, ex.toString(), ex );
+            interrupted = true;
+            Log.e(LOG_TAG, ex.toString(), ex);
         }
-
-        if (m_audioPlayer != null)
-            m_audioPlayer.stopAndWait();
-
-        m_byteBufferCache.clear( s_logger );
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 
-    public static AudioRecorder create( SessionManager sessionManager, boolean repeat )
+    static AudioRecorder create(SessionManager sessionManager)
     {
-        final int rates [] = { 11025, 16000, 22050, 44100 };
+        final int [] rates = { 11025, 16000, 22050, 44100 };
         for (int sampleRate : rates)
         {
             final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
             final int minBufferSize = AudioRecord.getMinBufferSize(
-                    sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT );
+                    sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT);
 
             if ((minBufferSize != AudioRecord.ERROR) &&
                 (minBufferSize != AudioRecord.ERROR_BAD_VALUE))
             {
-                /* Let's read not more than 1/2 sec, to reduce the latency,
-                 * also would be nice if frameSize will be an even number.
-                 */
-                final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 2) & (Integer.MAX_VALUE - 1);
+                /* Let's read not more than 1/5 sec, to reduce the latency. */
+                final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 5) & (Integer.MAX_VALUE - 1);
                 int bufferSize = (frameSize * 4);
                 if (bufferSize < minBufferSize)
                     bufferSize = minBufferSize;
@@ -319,11 +309,10 @@ public class AudioRecorder implements Runnable
                         sampleRate,
                         channelConfig,
                         AudioFormat.ENCODING_PCM_16BIT,
-                        bufferSize );
+                        bufferSize);
 
                 final String audioFormat = ("PCM:" + sampleRate);
-
-                return new AudioRecorder( sessionManager, audioRecord, audioFormat, frameSize, bufferSize, repeat );
+                return new AudioRecorder(sessionManager, audioRecord, audioFormat, frameSize);
             }
         }
         return null;

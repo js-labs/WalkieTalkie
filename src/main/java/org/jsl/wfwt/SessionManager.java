@@ -155,7 +155,7 @@ class SessionManager
         Node node = m_head;
         while (node != null)
         {
-            node.session.sendAudioFrame( msg, ptt );
+            node.session.sendAudioFrame(msg, ptt);
             node = node.next;
         }
     }

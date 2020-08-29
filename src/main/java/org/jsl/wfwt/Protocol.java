@@ -38,13 +38,13 @@ class Protocol
     private static final short MSG_PONG                 = 0x0006;
     private static final short MSG_STATION_NAME         = 0x0007;
 
-    static final byte VERSION = 2;
+    static final byte VERSION = 3;
     static final ByteOrder BYTE_ORDER = ByteOrder.BIG_ENDIAN;
 
     static class Message
     {
-        /* message size (short, 2 bytes) + message type (short, 2 bytes) */
-        static final short HEADER_SIZE = (2 + 2);
+        /* message size (short) + message type (short) */
+        static final short HEADER_SIZE = ((Short.SIZE / Byte.SIZE) * 2);
 
         static ByteBuffer init(ByteBuffer byteBuffer, short size, short type)
         {
@@ -66,7 +66,7 @@ class Protocol
             if ((HEADER_SIZE + dataSize) > Short.MAX_VALUE)
                 throw new InvalidParameterException();
             final RetainableByteBuffer byteBuffer = RetainableByteBuffer.allocateDirect(HEADER_SIZE + dataSize);
-            init(byteBuffer.getNioByteBuffer(), (short) (HEADER_SIZE +dataSize), type);
+            init(byteBuffer.getNioByteBuffer(), (short) (HEADER_SIZE + dataSize), type);
             return byteBuffer;
         }
 
@@ -141,19 +141,19 @@ class Protocol
             final int pos = msg.position();
             try
             {
-                final short audioFormatLength = msg.getShort( pos + Message.HEADER_SIZE + 2 );
-                msg.position( pos + Message.HEADER_SIZE + 2 + 2 + audioFormatLength );
+                final short audioFormatLength = msg.getShort(pos + Message.HEADER_SIZE + 2);
+                msg.position(pos + Message.HEADER_SIZE + 2 + 2 + audioFormatLength);
                 final short stationNameLength = msg.getShort();
                 if (stationNameLength > 0)
                 {
                     final CharsetDecoder decoder = Charset.defaultCharset().newDecoder();
-                    msg.limit( msg.position() + stationNameLength );
+                    msg.limit(msg.position() + stationNameLength);
                     ret = decoder.decode(msg.getNioByteBuffer()).toString();
                 }
             }
             finally
             {
-                msg.position( pos );
+                msg.position(pos);
             }
             return ret;
         }
@@ -182,7 +182,7 @@ class Protocol
             return msg;
         }
 
-        static String getAudioFormat( RetainableByteBuffer msg ) throws CharacterCodingException
+        static String getAudioFormat(RetainableByteBuffer msg) throws CharacterCodingException
         {
             String ret = null;
             final int pos = msg.position();
@@ -274,27 +274,39 @@ class Protocol
 
     static class AudioFrame extends Message
     {
+        /* short : batch start indicator, use short for better alignment */
         static final short ID = MSG_AUDIO_FRAME;
 
-        static int getMessageSize(int audioFrameSize)
+        static int getMessageSize(int frameSize)
         {
-            return HEADER_SIZE + audioFrameSize;
+            return HEADER_SIZE + /*batch start*/(Short.SIZE / Byte.SIZE) + frameSize;
         }
 
-        static ByteBuffer init(ByteBuffer byteBuffer, int frameSize)
+        static void init(ByteBuffer byteBuffer, boolean batchStart, int frameSize)
         {
-            return Message.init(byteBuffer, (short) getMessageSize(frameSize), ID);
+            Message.init(byteBuffer, (short) getMessageSize(frameSize), ID);
+            byteBuffer.putShort((short)(batchStart ? 1 : 0));
         }
 
-        static RetainableByteBuffer getAudioData( RetainableByteBuffer msg )
+        static boolean getBatchStart(RetainableByteBuffer msg)
+        {
+            final int pos = msg.position();
+            final short batchMarker = msg.getShort(pos + HEADER_SIZE);
+            return (batchMarker != 0);
+        }
+
+        static RetainableByteBuffer getAudioData(RetainableByteBuffer msg)
         {
             final int remaining = msg.remaining();
-            final short messageLength = msg.getShort(); // skip message length
-            if (BuildConfig.DEBUG && (messageLength != remaining))
+            final short messageSize = msg.getShort(); // skip message size
+            if (BuildConfig.DEBUG && (messageSize != remaining))
                 throw new InvalidParameterException();
             final short messageID = msg.getShort();
             if (BuildConfig.DEBUG && (messageID != ID))
                 throw new AssertionError();
+            if (messageSize == getMessageSize(0))
+                return null;
+            msg.getShort(); // skip batch start flag
             return msg.slice();
         }
     }

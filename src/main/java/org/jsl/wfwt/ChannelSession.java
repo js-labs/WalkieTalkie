@@ -56,7 +56,7 @@ public class ChannelSession implements Session.Listener
     private long [] m_pingSendTime;
     private long m_ping;
 
-    private boolean m_sendAudioFrame;
+    private boolean m_sendAudio;
 
     private String getLogPrefix()
     {
@@ -114,6 +114,7 @@ public class ChannelSession implements Session.Listener
         final int id = Protocol.Pong.getId(msg);
         final int idx = (id % m_pingSendTime.length);
         final long ping = (System.currentTimeMillis() - m_pingSendTime[idx]) / 2;
+        //Log.d(LOG_TAG, "ping " + id + ": delay=" + ping + "ms");
         if (Math.abs(ping - m_ping) > PING_THRESHOLD)
         {
             m_ping = ping;
@@ -141,9 +142,15 @@ public class ChannelSession implements Session.Listener
         switch (messageID)
         {
             case Protocol.AudioFrame.ID:
+                final boolean batchStart = Protocol.AudioFrame.getBatchStart(msg);
                 final RetainableByteBuffer audioFrame = Protocol.AudioFrame.getAudioData(msg);
-                m_audioPlayer.play(audioFrame);
-                audioFrame.release();
+                if (audioFrame == null)
+                    m_audioPlayer.batchEnd();
+                else
+                {
+                    m_audioPlayer.play(batchStart, audioFrame);
+                    audioFrame.release();
+                }
             break;
 
             case Protocol.Ping.ID:
@@ -255,15 +262,15 @@ public class ChannelSession implements Session.Listener
         m_streamDefragger.close();
     }
 
-    final void sendAudioFrame(RetainableByteBuffer audioFrame, boolean ptt)
+    void sendAudioFrame(RetainableByteBuffer audioFrame, boolean ptt)
     {
-        if (ptt || m_sendAudioFrame)
+        if (ptt || m_sendAudio)
             m_session.sendData( audioFrame );
     }
 
-    final void setSendAudioFrame(boolean sendAudioFrame)
+    void setSendAudio(boolean sendAudioFrame)
     {
-        m_sendAudioFrame = sendAudioFrame;
+        m_sendAudio = sendAudioFrame;
     }
 
     SocketAddress getRemoteAddress()

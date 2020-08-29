@@ -218,14 +218,14 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         final StationInfo stationInfo = m_listViewAdapter.getItem(position);
         if (pressed)
         {
-            stationInfo.channelSession.setSendAudioFrame(true);
+            stationInfo.channelSession.setSendAudio(true);
             final int receivers = m_receivers++;
             if (!m_ptt && (receivers == 0))
                 m_audioRecorder.startRecording(false);
         }
         else
         {
-            stationInfo.channelSession.setSendAudioFrame(false);
+            stationInfo.channelSession.setSendAudio(false);
             final int receivers = --m_receivers;
             if (!m_ptt && (receivers == 0))
                 m_audioRecorder.stopRecording();

@@ -66,17 +66,17 @@ public class WalkieService extends Service
         void onInit( AudioRecorder audioRecorder );
     }
 
-    public class BinderImpl extends Binder
+    class BinderImpl extends Binder
     {
-        void setStateListener( StateListener stateListener, Channel.StateListener channelStateListener )
+        void setStateListener(StateListener stateListener, Channel.StateListener channelStateListener)
         {
-            stateListener.onInit( m_audioRecorder );
-            m_channel.setStateListener( channelStateListener );
+            stateListener.onInit(m_audioRecorder);
+            m_channel.setStateListener(channelStateListener);
         }
 
-        public void setStationName( String stationName )
+        void setStationName(String stationName)
         {
-            m_channel.setStationName( stationName );
+            m_channel.setStationName(stationName);
         }
     }
 
@@ -84,17 +84,17 @@ public class WalkieService extends Service
     {
         private final Collider m_collider;
 
-        public ColliderThread( Collider collider )
+        ColliderThread(Collider collider)
         {
-            super( "ColliderThread" );
+            super("ColliderThread");
             m_collider = collider;
         }
 
         public void run()
         {
-            Log.i( LOG_TAG, "Collider thread: start" );
+            Log.i(LOG_TAG, "Collider thread: start");
             m_collider.run();
-            Log.i( LOG_TAG, "Collider thread: done" );
+            Log.i(LOG_TAG, "Collider thread: done");
         }
     }
 
@@ -248,7 +248,7 @@ public class WalkieService extends Service
         return false;
     }
 
-    public int onStartCommand( Intent intent, int flags, int startId )
+    public int onStartCommand(Intent intent, int flags, int startId)
     {
         Log.d( LOG_TAG, "onStartCommand: flags=" + flags + " startId=" + startId );
 
@@ -257,7 +257,7 @@ public class WalkieService extends Service
             final String deviceID = getDeviceID( getContentResolver() );
 
             final SessionManager sessionManager = new SessionManager();
-            m_audioRecorder = AudioRecorder.create( sessionManager, /*repeat*/false );
+            m_audioRecorder = AudioRecorder.create(sessionManager);
 
             if (m_audioRecorder != null)
             {
@@ -276,10 +276,13 @@ public class WalkieService extends Service
 
                 try
                 {
-                    m_collider = Collider.create();
-                    m_colliderThread = new ColliderThread( m_collider );
+                    final Collider.Config colliderConfig = new Collider.Config();
+                    colliderConfig.threadPriority = Thread.MAX_PRIORITY;
+                    m_collider = Collider.create(colliderConfig);
+                    m_colliderThread = new ColliderThread(m_collider);
+                    m_colliderThread.setPriority(colliderConfig.threadPriority);
 
-                    final TimerQueue timerQueue = new TimerQueue( m_collider.getThreadPool() );
+                    final TimerQueue timerQueue = new TimerQueue(m_collider.getThreadPool());
 
                     m_channel = new Channel(
                             deviceID,
@@ -291,7 +294,7 @@ public class WalkieService extends Service
                             SERVICE_NAME,
                             sessionManager,
                             timerQueue,
-                            Config.PING_INTERVAL );
+                            Config.PING_INTERVAL);
 
                     m_discoveryListener = new DiscoveryListener();
                     m_nsdManager.discoverServices( SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, m_discoveryListener );
