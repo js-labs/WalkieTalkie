@@ -1,11 +1,12 @@
 buildscript {
 
     repositories {
-        mavenCentral()
+        google()
+        jcenter()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.3.0'
+        classpath 'com.android.tools.build:gradle:4.0.0'
     }
 }
 
@@ -13,13 +14,24 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 16
-    buildToolsVersion "27.0.3"
+    buildToolsVersion "29.0.2"
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 16
+    }
 }
 
 repositories {
+    google()
     jcenter()
 }
 
 dependencies {
-    compile 'org.js-labs:js-collider:0.2.2'
+    implementation 'org.js-labs:js-collider:0.2.3'
 }

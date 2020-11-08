@@ -426,7 +426,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         final boolean checkWiFiStatus = sharedPreferences.getBoolean( KEY_CHECK_WIFI_STATUS, true );
         if (checkWiFiStatus)
         {
-            final WifiManager manager = (WifiManager) getSystemService( WIFI_SERVICE );
+            final WifiManager manager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
             if (!manager.isWifiEnabled())
             {
                 final LayoutInflater layoutInflater = LayoutInflater.from( this );
