@@ -35,10 +35,10 @@ public abstract class AudioPlayer
     private static final String LOG_TAG = AudioPlayer.class.getSimpleName();
 
     private static final AtomicReferenceFieldUpdater<Node, Node> s_nodeNextUpdater
-            = AtomicReferenceFieldUpdater.newUpdater( Node.class, Node.class, "next");
+            = AtomicReferenceFieldUpdater.newUpdater(Node.class, Node.class, "next");
 
     private static final AtomicReferenceFieldUpdater<Impl, Node> s_tailUpdater
-            = AtomicReferenceFieldUpdater.newUpdater( Impl.class, Node.class, "m_tail");
+            = AtomicReferenceFieldUpdater.newUpdater(Impl.class, Node.class, "m_tail");
 
     private enum NodeCommand { NONE, BATCH_START, BATCH_END, STOP }
 
@@ -61,7 +61,7 @@ public abstract class AudioPlayer
         final Thread m_thread;
         final Semaphore m_sema;
         Node m_head;
-        volatile Node m_tail;
+        public volatile Node m_tail;
 
         Impl(String logPrefix)
         {
@@ -292,7 +292,7 @@ public abstract class AudioPlayer
             String audioFormat,
             Channel channel,
             String serviceName,
-            Session session )
+            Session session)
     {
         final String [] ss = audioFormat.split(":");
         try
