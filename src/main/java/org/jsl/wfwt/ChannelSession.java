@@ -38,7 +38,7 @@ public class ChannelSession implements Session.Listener
 
     private static final AtomicIntegerFieldUpdater<ChannelSession>
             s_totalBytesReceivedUpdater = AtomicIntegerFieldUpdater.newUpdater(
-                    ChannelSession.class, "m_totalBytesReceived" );
+                    ChannelSession.class, "m_totalBytesReceived");
 
     private final Channel m_channel;
     private final String m_serviceName;
@@ -65,7 +65,7 @@ public class ChannelSession implements Session.Listener
 
     private class TimerHandler implements TimerQueue.Task
     {
-        private long m_interval;
+        private final long m_interval;
 
         TimerHandler(long interval)
         {
@@ -213,45 +213,52 @@ public class ChannelSession implements Session.Listener
         }
 
         m_sessionManager.addSession(this);
-        // FIXME: check for possible message in the streamDefragger
+
+        // m_streamDefragger can contain some messages, we have to process them
+        onDataReceivedEx(m_streamDefragger.getNext());
     }
 
-    public void onDataReceived( RetainableByteBuffer data )
+    private void onDataReceivedEx(RetainableByteBuffer msg)
     {
-        final int bytesReceived = data.remaining();
-        RetainableByteBuffer msg = m_streamDefragger.getNext( data );
         while (msg != null)
         {
             if (msg == StreamDefragger.INVALID_HEADER)
             {
-                Log.i( LOG_TAG, getLogPrefix() +
-                        "invalid message received, close connection." );
+                Log.i(LOG_TAG, getLogPrefix() +
+                        "invalid message received, close connection.");
                 m_session.closeConnection();
                 break;
             }
             else
             {
-                handleMessage( msg );
+                handleMessage(msg);
                 msg = m_streamDefragger.getNext();
             }
         }
-        s_totalBytesReceivedUpdater.addAndGet( this, bytesReceived );
+    }
+
+    public void onDataReceived(RetainableByteBuffer data)
+    {
+        final int bytesReceived = data.remaining();
+        onDataReceivedEx(m_streamDefragger.getNext(data));
+        s_totalBytesReceivedUpdater.addAndGet(this, bytesReceived);
     }
 
     public void onConnectionClosed()
     {
-        Log.i( LOG_TAG, getLogPrefix() + "connection closed" );
+        Log.i(LOG_TAG, getLogPrefix() + "connection closed");
 
+        boolean interrupted = false;
         if (m_timerHandler != null)
         {
             try
             {
-                m_timerQueue.cancel( m_timerHandler );
+                m_timerQueue.cancel(m_timerHandler);
             }
             catch (final InterruptedException ex)
             {
-                Log.w( LOG_TAG, ex.toString(), ex );
-                Thread.currentThread().interrupt();
+                Log.w(LOG_TAG, ex.toString(), ex);
+                interrupted = true;
             }
             m_timerHandler = null;
         }
@@ -260,12 +267,15 @@ public class ChannelSession implements Session.Listener
         m_sessionManager.removeSession(this);
         m_audioPlayer.stopAndWait();
         m_streamDefragger.close();
+
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 
     void sendAudioFrame(RetainableByteBuffer audioFrame, boolean ptt)
     {
         if (ptt || m_sendAudio)
-            m_session.sendData( audioFrame );
+            m_session.sendData(audioFrame);
     }
 
     void setSendAudio(boolean sendAudioFrame)
