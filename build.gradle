@@ -33,5 +33,5 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.js-labs:js-collider:0.2.3'
+    implementation 'org.js-labs:js-collider:0.2.5'
 }
