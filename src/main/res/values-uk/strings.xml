@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="_colon"> : </string>
+    <string name="about">Про програму</string>
+    <string name="about_text">
+        Ця програма передає, записаний через мікрофон, звук до таких самих
+        пристроїв, на яких працює така ж програма, як радіо Walkie Talkie.\n\n
+        Пристрої знаходять одне одного через NSD (або Bonjour).\n\n
+        Програма виходить під ліцензією GPL, вихідний код доступний на
+        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+        Програма використовує JS-Collider (масштабований каркас Java NIO),
+        детальніше дивіться на
+        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>.
+    </string>
+    <string name="app_name">WiFi Walkie Talkie</string>
+    <string name="back_button_exits">Кнопка Назад виходить</string>
+    <string name="cancel">Скасувати</string>
+    <string name="check_wifi_status_on_start">Перевіряти стан WiFi під час запуску</string>
+    <string name="close">Закрити</string>
+    <string name="enable">Дозволити</string>
+    <string name="exit">Вийти</string>
+    <string name="network_initialization_failed">Не вдалося ініціалізувати мережу</string>
+    <string name="never_ask_again">Більше не питати</string>
+    <string name="nsd_not_found">Не знайдено сервіс NSD</string>
+    <string name="push_to_talk">\nНАТИСНІТЬ, ЩОБ ГОВОРИТИ\n</string>
+    <string name="running">Працює</string>
+    <string name="set">Задати</string>
+    <string name="settings">Параметри</string>
+    <string name="station_name">Назва станції</string>
+    <string name="system_error">Помилка системи</string>
+    <string name="turn_wifi_on">Увімкнути WiFi</string>
+    <string name="use_volume_buttons_to_talk">Викор. кнопки гучності для розмови</string>
+    <string name="volume">Гучність</string>
+    <string name="wifi_dialog_message">Програма може бачити лише пристрої, що підключені в межах одної мережі WiFi.</string>
+    <string name="wifi_is_off">WiFi вимкнено</string>
+</resources>
