@@ -5,12 +5,10 @@
     <string name="about_text">
         Este programa envía el sonido grabado por el micrófono para enviarlo a
         otros sistemas que ejecutan el mismo programa. Funciona como un radio Walkie-talkie.\n\n
-        Os aparelhos são descobertos por NSD (alias Bonjour).\n\n
-        Programa publicado sob licença GPL, código fonte disponível no endereço
         Los sistemas son descubiertos con NSD (también llamado Bonjour).\n\n
-
+        Programa publicado bajo licencia GNU/GPL, el código fuente está disponible en la dirección
         <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
-        El sistema utiliza JS-Collider (un framework Jav NIO escalable), visite
+        El sistema utiliza JS-Collider (un framework Java NIO escalable), visite
         <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
         para mayor información.
     </string>
