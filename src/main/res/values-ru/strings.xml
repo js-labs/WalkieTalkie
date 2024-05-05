@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="_colon"> : </string>
+    <string name="about">О приложении</string>
+    <string name="about_text">
+        Это приложение передает звук записанный с микрофона на другие устройства
+        с тем же приложением в одной сети, поэтому работает как рация.\n\n
+        Устройства находят друг друга с помощью NSD (т.е. Bonjour), никакой настройки не требуется.\n\n
+        Приложение выпущено под лицензией AGPL-3.0 и исходный код доступен по адресу
+        <a href="https://github.com/js-labs/WalkieTalkie">github.com/js-labs/WalkieTalkie</a>\n\n
+    </string>
+    <string name="app_name">Wi-Fi рация</string>
+    <string name="back_button_exits">Выходить кнопкой Назад</string>
+    <string name="cancel">Отмена</string>
+    <string name="check_wifi_status_on_start">Проверять состояния Wi-Fi при запуске</string>
+    <string name="close">Закрыть</string>
+    <string name="enable">Включить</string>
+    <string name="exit">Выход</string>
+    <string name="network_initialization_failed">Ошибка инициализации сети</string>
+    <string name="never_ask_again">Никогда не спрашивать снова</string>
+    <string name="nsd_not_found">Служба NSD не найдена</string>
+    <string name="push_to_talk">\nНАЖМИТЕ ЧТОБЫ ГОВОРИТЬ\n</string>
+    <string name="running">Запущено</string>
+    <string name="set">Сохранить</string>
+    <string name="settings">Настройки</string>
+    <string name="station_name">Название станции</string>
+    <string name="system_error">Системная ошибка</string>
+    <string name="turn_wifi_on">Включить Wi-Fi</string>
+    <string name="use_volume_buttons_to_talk">Использовать кнопки громкости чтобы говорить</string>
+    <string name="volume">Громкость</string>
+    <string name="wifi_dialog_message">Приложение может видеть только устройства подключенные к одной сети Wi-Fi.</string>
+    <string name="wifi_is_off">Wi-Fi отключен</string>
+</resources>
