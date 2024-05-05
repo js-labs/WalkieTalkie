@@ -1,0 +1,3 @@
+## 1.10
+- fixed NPE on app restart
+- fixed double activity instance on notification
