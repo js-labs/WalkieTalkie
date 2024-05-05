@@ -1,0 +1,2 @@
+## 1.13
+- Fix runtime exception on Android 11

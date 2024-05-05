@@ -1,0 +1,2 @@
+## 1.9
+- support background operation in receiver mode
