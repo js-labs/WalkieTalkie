@@ -3,16 +3,13 @@
     <string name="_colon"> : </string>
     <string name="about">About</string>
     <string name="about_text">
-        This program transmits sound recorded from microphone to some other devices
-        running the same program, so works like Walkie Talkie radio.\n\n
-        Devices find each other by NSD (aka Bonjour).\n\n
-        Program released under GPL license, source code available at
-        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
-        Application use JS-Collider (scalable Java NIO framework), see
-        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
-        for further details.
+        This app transmits sound recorded from microphone to other devices
+        running the same app on the same network, so works like Walkie Talkie radio.\n\n
+        Devices find each other by NSD (i.e. Bonjour), no any configuration required.\n\n
+        The app is released under AGPL-3.0 license and source code available at
+        <a href="https://github.com/js-labs/WalkieTalkie">github.com/js-labs/WalkieTalkie</a>\n\n
     </string>
-    <string name="app_name">WiFi Walkie Talkie</string>
+    <string name="app_name">Wi-Fi Walkie Talkie</string>
     <string name="back_button_exits">Back button exits</string>
     <string name="cancel">Cancel</string>
     <string name="check_wifi_status_on_start">Check WiFi status on start</string>
@@ -24,13 +21,13 @@
     <string name="nsd_not_found">NSD service not found</string>
     <string name="push_to_talk">\nPUSH-TO-TALK\n</string>
     <string name="running">Running</string>
-    <string name="set">Set</string>
+    <string name="set">Save</string>
     <string name="settings">Settings</string>
     <string name="station_name">Station name</string>
     <string name="system_error">System error</string>
-    <string name="turn_wifi_on">Turn WiFi on</string>
+    <string name="turn_wifi_on">Turn Wi-Fi on</string>
     <string name="use_volume_buttons_to_talk">Use volume buttons to talk</string>
     <string name="volume">Volume</string>
-    <string name="wifi_dialog_message">Application can only see devices connected to the same WiFi network.</string>
-    <string name="wifi_is_off">WiFi is off</string>
+    <string name="wifi_dialog_message">Application can only see devices connected to the same Wi-Fi network.</string>
+    <string name="wifi_is_off">Wi-Fi is off</string>
 </resources>
