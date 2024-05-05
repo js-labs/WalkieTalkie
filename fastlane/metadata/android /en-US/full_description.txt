@@ -1,0 +1,6 @@
+This app transmits sound recorded from microphone to other devices
+running the same app on the same network, so works like Walkie Talkie radio.
+
+Devices find each other by Android NSD (i.e. Bonjour), no any configuration required.
+Audio data is being transmitted by the unicast channel (TCP/IP).
+So each device works as a server and as a client at the same time.
