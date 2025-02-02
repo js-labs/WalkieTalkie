@@ -274,7 +274,7 @@ class Protocol
 
     static class AudioFrame extends Message
     {
-        /* short : batch start indicator, use short for better alignment */
+        /* short : batch start indicator (use short for better alignment) */
         static final short ID = MSG_AUDIO_FRAME;
 
         static int getMessageSize(int frameSize)
