@@ -3,14 +3,10 @@
     <string name="_colon"> : </string>
     <string name="about">Acerca de</string>
     <string name="about_text">
-        Este programa transmite o som gravado pelo microfone para outros aparelhos
-        que executam o mesmo programa. Ela funciona como um rádio Walkie-talkie.\n\n
-        Os aparelhos são descobertos por NSD (alias Bonjour).\n\n
-        Programa publicado sob licença GPL, código fonte disponível no endereço
-        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
-        O programa utiliza JS-Collider (scalable Java NIO framework), visite
-        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
-        para mais informações.
+    Este programa transmite o som gravado pelo microfone para outros aparelhos que executam o mesmo programa. Ela funciona como um rádio Walkie-talkie.\n\n
+    Os aparelhos são descobertos por NSD (alias Bonjour).\n\n
+    Programa publicado sob licença AGPL, código fonte disponível no endereço <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+    O programa utiliza JS-Collider (scalable Java NIO framework), visite <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a> para mais informações.
     </string>
     <string name="app_name">Talkie Walkie Wifi</string>
     <string name="back_button_exits">O botão voltar fecha o applicativo</string>
@@ -22,6 +18,7 @@
     <string name="network_initialization_failed">Erro ao arrancar a rede</string>
     <string name="never_ask_again">Não voltar a perguntar</string>
     <string name="nsd_not_found">Serviço NSD não disponível</string>
+    <string name="roger_beep">Roger beep</string>
     <string name="push_to_talk">\nCARREGAR-PARA-FALAR\n</string>
     <string name="running">Em funcionamento</string>
     <string name="set">OK</string>

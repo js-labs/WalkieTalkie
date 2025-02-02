@@ -19,6 +19,8 @@
 package org.jsl.wfwt;
 
 import org.jsl.collider.RetainableByteBuffer;
+
+import java.nio.ByteBuffer;
 import java.util.concurrent.locks.ReentrantLock;
 
 class SessionManager
@@ -151,6 +153,16 @@ class SessionManager
     }
 
     void sendAudioFrame(RetainableByteBuffer msg, boolean ptt)
+    {
+        Node node = m_head;
+        while (node != null)
+        {
+            node.session.sendAudioFrame(msg, ptt);
+            node = node.next;
+        }
+    }
+
+    void sendAudioFrame(ByteBuffer msg, boolean ptt)
     {
         Node node = m_head;
         while (node != null)

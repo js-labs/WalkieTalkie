@@ -20,6 +20,7 @@ package org.jsl.wfwt;
 
 import android.app.*;
 import android.content.*;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -42,7 +43,12 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     public static final String KEY_VOLUME = "volume";
     private static final String KEY_CHECK_WIFI_STATUS = "check-wifi-status";
     private static final String KEY_USE_VOLUME_BUTTONS_TO_TALK = "use-volume-buttons-to-talk";
+    public static final String KEY_ROGER_BEEP = "roger-beep";
     private static final String KEY_BACK_BUTTON_EXITS = "back-button-exits";
+
+    private static final boolean DEFAULT_CHECK_WIFI_STATUS = true;
+    private static final boolean DEFAULT_ROGER_BEEP = true;
+    private static final boolean DEFAULT_KEY_BUTTON_EXITS = false;
 
     private boolean m_exit;
     private Intent m_serviceIntent;
@@ -63,7 +69,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
     private class ButtonTalkListener implements SwitchButton.StateListener
     {
-        public void onStateChanged( boolean state )
+        public void onStateChanged(boolean state)
         {
             if (state)
             {
@@ -154,6 +160,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         private final SeekBar m_seekBarVolume;
         private final CheckBox m_checkBoxCheckWiFiStateOnStart;
         private final CheckBox m_checkBoxUseVolumeButtonsToTalk;
+        private final CheckBox m_checkBoxRogerBeep;
         private final CheckBox m_checkBoxBackButtonExits;
 
         public SettingsDialogClickListener(
@@ -161,12 +168,14 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 SeekBar seekBarVolume,
                 CheckBox checkBoxCheckWiFiStateOnStart,
                 CheckBox checkBoxUseVolumeButtonsToTalk,
+                CheckBox checkBoxRogerBeep,
                 CheckBox checkBoxBackButtonExits)
         {
             m_editTextStationName = editTextStationName;
             m_seekBarVolume = seekBarVolume;
             m_checkBoxCheckWiFiStateOnStart = checkBoxCheckWiFiStateOnStart;
             m_checkBoxUseVolumeButtonsToTalk = checkBoxUseVolumeButtonsToTalk;
+            m_checkBoxRogerBeep = checkBoxRogerBeep;
             m_checkBoxBackButtonExits = checkBoxBackButtonExits;
         }
 
@@ -177,7 +186,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final String stationName = m_editTextStationName.getText().toString();
                 final int audioVolume = m_seekBarVolume.getProgress();
 
-                final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+                final SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
                 final SharedPreferences.Editor editor = sharedPreferences.edit();
 
                 if (m_stationName.compareTo(stationName) != 0)
@@ -192,23 +201,37 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
                 if (audioVolume != m_audioVolume)
                 {
-                    editor.putString( KEY_VOLUME, Integer.toString(audioVolume) );
+                    editor.putString(KEY_VOLUME, Integer.toString(audioVolume));
 
                     final int audioStream = MainActivity.AUDIO_STREAM;
-                    final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-                    Log.d(LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")");
-                    audioManager.setStreamVolume( audioStream, audioVolume, 0 );
-
+                    final AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+                    if (audioManager != null)
+                    {
+                        Log.d(LOG_TAG, "setStreamVolume(" + audioStream + ", " + audioVolume + ")");
+                        audioManager.setStreamVolume(audioStream, audioVolume, 0);
+                    }
+                    else
+                        Log.e(LOG_TAG, "getSystemService(AUDIO_SERVICE) failed");
                     m_audioVolume = audioVolume;
                 }
 
                 final boolean useVolumeButtonsToTalk = m_checkBoxUseVolumeButtonsToTalk.isChecked();
-                editor.putBoolean( KEY_CHECK_WIFI_STATUS, m_checkBoxCheckWiFiStateOnStart.isChecked() );
-                editor.putBoolean( KEY_USE_VOLUME_BUTTONS_TO_TALK, useVolumeButtonsToTalk );
-                editor.putBoolean( KEY_BACK_BUTTON_EXITS, m_checkBoxBackButtonExits.isChecked() );
+                final boolean rogerBeep = m_checkBoxRogerBeep.isChecked();
+                editor.putBoolean(KEY_CHECK_WIFI_STATUS, m_checkBoxCheckWiFiStateOnStart.isChecked());
+                editor.putBoolean(KEY_USE_VOLUME_BUTTONS_TO_TALK, useVolumeButtonsToTalk );
+                editor.putBoolean(KEY_ROGER_BEEP, rogerBeep);
+                editor.putBoolean(KEY_BACK_BUTTON_EXITS, m_checkBoxBackButtonExits.isChecked());
                 editor.apply();
 
                 MainActivity.this.m_useVolumeButtonsToTalk = useVolumeButtonsToTalk;
+
+                if (rogerBeep)
+                {
+                    final Resources resources = getApplicationContext().getResources();
+                    MainActivity.this.m_audioRecorder.setRogerBeepOn(resources);
+                }
+                else
+                    MainActivity.this.m_audioRecorder.setRogerBeepOff();
             }
         }
     }
@@ -216,20 +239,25 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     void onListViewItemPressed(int position, boolean pressed)
     {
         final StationInfo stationInfo = m_listViewAdapter.getItem(position);
-        if (pressed)
+        if (stationInfo != null)
         {
-            stationInfo.channelSession.setSendAudio(true);
-            final int receivers = m_receivers++;
-            if (!m_ptt && (receivers == 0))
-                m_audioRecorder.startRecording(false);
+            if (pressed)
+            {
+                stationInfo.channelSession.setSendAudio(true);
+                final int receivers = m_receivers++;
+                if (!m_ptt && (receivers == 0))
+                    m_audioRecorder.startRecording(false);
+            }
+            else
+            {
+                stationInfo.channelSession.setSendAudio(false);
+                final int receivers = --m_receivers;
+                if (!m_ptt && (receivers == 0))
+                    m_audioRecorder.stopRecording();
+            }
         }
         else
-        {
-            stationInfo.channelSession.setSendAudio(false);
-            final int receivers = --m_receivers;
-            if (!m_ptt && (receivers == 0))
-                m_audioRecorder.stopRecording();
-        }
+            Log.e(LOG_TAG, "Internal error: stationInfo=null");
     }
 
     /* WalkieService.StateListener interface implementation */
@@ -244,6 +272,16 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                     m_audioRecorder = audioRecorder;
                     m_buttonTalk.setStateListener(new ButtonTalkListener());
                     m_buttonTalk.setEnabled(true);
+
+                    final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
+                    final boolean rogerBeep = sharedPreferences.getBoolean(KEY_ROGER_BEEP, DEFAULT_ROGER_BEEP);
+                    if (rogerBeep)
+                    {
+                        final Resources resources = getApplicationContext().getResources();
+                        MainActivity.this.m_audioRecorder.setRogerBeepOn(resources);
+                    }
+                    else
+                        m_audioRecorder.setRogerBeepOff();
                 }
             } );
         }
@@ -311,19 +349,21 @@ public class MainActivity extends Activity implements WalkieService.StateListene
                 final SeekBar seekBar = (SeekBar) dialogView.findViewById( R.id.seekBarVolume );
                 final CheckBox checkBoxCheckWiFiStatusOnStart = (CheckBox) dialogView.findViewById( R.id.checkBoxCheckWiFiStatusOnStart );
                 final CheckBox checkBoxUseVolumeButtonsToTalk = (CheckBox) dialogView.findViewById( R.id.checkBoxUseVolumeButtonsToTalk );
+                final CheckBox checkBoxRogerBeep = (CheckBox) dialogView.findViewById( R.id.checkBoxRogerBeep );
                 final CheckBox checkBoxBackButtonExists = (CheckBox) dialogView.findViewById( R.id.checkBoxBackButtonExits );
 
                 editText.setText( m_stationName );
                 seekBar.setMax( m_audioMaxVolume );
                 seekBar.setProgress( m_audioVolume );
-                checkBoxCheckWiFiStatusOnStart.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, true) );
-                checkBoxUseVolumeButtonsToTalk.setChecked( sharedPreferences.getBoolean(KEY_USE_VOLUME_BUTTONS_TO_TALK, false) );
-                checkBoxBackButtonExists.setChecked( sharedPreferences.getBoolean(KEY_BACK_BUTTON_EXITS, false) );
+                checkBoxCheckWiFiStatusOnStart.setChecked( sharedPreferences.getBoolean(KEY_CHECK_WIFI_STATUS, DEFAULT_CHECK_WIFI_STATUS) );
+                checkBoxUseVolumeButtonsToTalk.setChecked( m_useVolumeButtonsToTalk );
+                checkBoxRogerBeep.setChecked( sharedPreferences.getBoolean(KEY_ROGER_BEEP, DEFAULT_ROGER_BEEP) );
+                checkBoxBackButtonExists.setChecked( sharedPreferences.getBoolean(KEY_BACK_BUTTON_EXITS, DEFAULT_KEY_BUTTON_EXITS) );
                 dialogBuilder.setTitle( R.string.settings );
                 dialogBuilder.setView( dialogView );
                 dialogBuilder.setCancelable( true );
                 dialogBuilder.setPositiveButton( getString(R.string.set), new SettingsDialogClickListener(
-                        editText, seekBar, checkBoxCheckWiFiStatusOnStart, checkBoxUseVolumeButtonsToTalk, checkBoxBackButtonExists) );
+                        editText, seekBar, checkBoxCheckWiFiStatusOnStart, checkBoxUseVolumeButtonsToTalk, checkBoxRogerBeep, checkBoxBackButtonExists) );
                 dialogBuilder.setNegativeButton( getString(R.string.cancel), null );
                 final AlertDialog dialog = dialogBuilder.create();
                 dialog.show();
@@ -354,7 +394,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
     public void onResume()
     {
         super.onResume();
-        Log.i( LOG_TAG, "onResume" );
+        Log.i(LOG_TAG, "onResume");
 
         final NotificationManager notificationManager = (NotificationManager) getSystemService( NOTIFICATION_SERVICE );
         notificationManager.cancelAll();
@@ -367,7 +407,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         if ((m_stationName == null) || m_stationName.isEmpty())
             m_stationName = Build.MODEL;
 
-        m_useVolumeButtonsToTalk = sharedPreferences.getBoolean( KEY_USE_VOLUME_BUTTONS_TO_TALK, false );
+        m_useVolumeButtonsToTalk = sharedPreferences.getBoolean(KEY_USE_VOLUME_BUTTONS_TO_TALK, false);
 
         if (!m_stationName.isEmpty())
         {
@@ -375,9 +415,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             setTitle( title );
         }
 
-        final int audioStream = MainActivity.AUDIO_STREAM;
         final AudioManager audioManager = (AudioManager) getSystemService( AUDIO_SERVICE );
-        m_audioMaxVolume = audioManager.getStreamMaxVolume( audioStream );
+        m_audioMaxVolume = audioManager.getStreamMaxVolume( MainActivity.AUDIO_STREAM );
 
         final String str = sharedPreferences.getString( KEY_VOLUME, null );
         if ((str == null) || str.isEmpty())
@@ -394,10 +433,10 @@ public class MainActivity extends Activity implements WalkieService.StateListene
             }
         }
 
-        m_serviceIntent = new Intent( this, WalkieService.class );
-        m_serviceIntent.putExtra( KEY_STATION_NAME, m_stationName );
-        m_serviceIntent.putExtra( KEY_VOLUME, m_audioVolume );
-        final ComponentName componentName = startService( m_serviceIntent );
+        m_serviceIntent = new Intent(this, WalkieService.class);
+        m_serviceIntent.putExtra(KEY_STATION_NAME, m_stationName);
+        m_serviceIntent.putExtra(KEY_VOLUME, m_audioVolume);
+        final ComponentName componentName = startService(m_serviceIntent);
 
         m_serviceConnection = new ServiceConnection()
         {
@@ -427,7 +466,7 @@ public class MainActivity extends Activity implements WalkieService.StateListene
         if (checkWiFiStatus)
         {
             final WifiManager manager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (!manager.isWifiEnabled())
+            if ((manager != null) && !manager.isWifiEnabled())
             {
                 final LayoutInflater layoutInflater = LayoutInflater.from( this );
                 final AlertDialog.Builder dialogBuilder = new AlertDialog.Builder( this );
@@ -548,8 +587,8 @@ public class MainActivity extends Activity implements WalkieService.StateListene
 
     public void onBackPressed()
     {
-        final SharedPreferences sharedPreferences = getPreferences( Context.MODE_PRIVATE );
-        m_exit = sharedPreferences.getBoolean( KEY_BACK_BUTTON_EXITS, false );
+        final SharedPreferences sharedPreferences = getPreferences(Context.MODE_PRIVATE);
+        m_exit = sharedPreferences.getBoolean(KEY_BACK_BUTTON_EXITS, DEFAULT_KEY_BUTTON_EXITS);
         super.onBackPressed();
     }
 }

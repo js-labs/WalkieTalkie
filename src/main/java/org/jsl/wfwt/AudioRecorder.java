@@ -18,11 +18,16 @@
  */
 package org.jsl.wfwt;
 
+import android.content.res.Resources;
 import android.media.*;
 import android.os.Process;
 import android.util.Log;
 import org.jsl.collider.RetainableByteBuffer;
 import org.jsl.collider.RetainableByteBufferCache;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
@@ -42,12 +47,41 @@ public class AudioRecorder implements Runnable
     private final Condition m_cond;
     private int m_state;
     private boolean m_ptt;
+    private ByteBuffer m_rogerBeep;
 
     private static final int IDLE  = 0;
     private static final int START = 1;
     private static final int RUN   = 2;
     private static final int STOP  = 3;
     private static final int SHTDN = 4; // shutdown
+
+    private static class SampleRateInfo
+    {
+        final int sampleRate;
+        final int rogerBeepResourceId;
+
+        SampleRateInfo(int sampleRate, int rogerBeepResourceId)
+        {
+            this.sampleRate = sampleRate;
+            this.rogerBeepResourceId = rogerBeepResourceId;
+        }
+    };
+
+    // According to the Android documentation 44100Hz is currently the only rate
+    // that is guaranteed to work on all devices, but other rates such as 22050,
+    // 16000, and 11025 may work on some device. It is better to transmit as low data
+    // as possible,  so we will try to create recorder with rates starting from the lowest
+    // while will not success.
+    // We could have roger beep data with only highest sample rate and resample it
+    // to the lower sample rate if we will be able to create a recorder with lower
+    // sample rate, but resampling is not so simple, so let's have a resource
+    // per each possible sample rate.
+    private final static SampleRateInfo[] s_sampleRates = {
+        new SampleRateInfo(11025, R.raw.roger_beep_11025),
+        new SampleRateInfo(16000, R.raw.roger_beep_16000),
+        new SampleRateInfo(22050, R.raw.roger_beep_22050),
+        new SampleRateInfo(44100, R.raw.roger_beep_44100)
+    };
 
     private static class SendBuffer
     {
@@ -149,6 +183,10 @@ public class AudioRecorder implements Runnable
                         m_audioRecord.stop();
                         m_state = IDLE;
 
+                        final ByteBuffer rogerBeep = m_rogerBeep;
+                        if (rogerBeep != null)
+                            m_sessionManager.sendAudioFrame(rogerBeep, /*ptt*/true);
+
                         final int messageSize = Protocol.AudioFrame.getMessageSize(0);
                         final RetainableByteBuffer byteBuffer = sendBuffer.getBuffer(messageSize);
                         final int position = byteBuffer.position();
@@ -177,7 +215,9 @@ public class AudioRecorder implements Runnable
                     throw new AssertionError();
 
                 final int bytesReady = m_audioRecord.read(
-                        sendBuffer.array, sendBuffer.arrayOffset+byteBuffer.position(), frameSize);
+                        sendBuffer.array,
+                        sendBuffer.arrayOffset + byteBuffer.position(),
+                        frameSize);
 
                 if (bytesReady == frameSize)
                 {
@@ -257,9 +297,90 @@ public class AudioRecorder implements Runnable
         }
     }
 
+    static ByteBuffer loadWavResource(Resources resources, int resourceId)
+    {
+        try
+        {
+            final InputStream inputStream = resources.openRawResource(resourceId);
+            try
+            {
+                final ByteBuffer buffer = WAV.loadData(inputStream);
+
+                // Buffer returned by WAV.loadData() contains the whole resource (WAV file),
+                // but the current position is start of PCM data.
+                // We could use space before the data for the message header.
+                final int messageHeaderSize = Protocol.AudioFrame.getMessageSize(0);
+                int position = buffer.position();
+                if (position < messageHeaderSize)
+                {
+                    Log.w(LOG_TAG, "Not enough space for the message header in the buffer");
+                    return null;
+                }
+
+                Log.i(LOG_TAG, "Using data from the resource " + resourceId + " of size " + buffer.remaining() + " as roger beep");
+
+                final int frameSize = buffer.remaining();
+                position -= messageHeaderSize;
+                buffer.position(position);
+                buffer.order(Protocol.BYTE_ORDER);
+                Protocol.AudioFrame.init(buffer, /*start of batch*/false, frameSize);
+                buffer.position(position);
+
+                return buffer;
+            }
+            catch (final WAV.ReadException ex)
+            {
+                Log.e(LOG_TAG, "WAV.loadData() for resource " + resourceId + " failed: " + ex);
+            }
+            finally
+            {
+                inputStream.close();
+            }
+        }
+        catch (final Resources.NotFoundException ex)
+        {
+            Log.e(LOG_TAG, "openRawResource(" + resourceId + ") failed: " + ex);
+        }
+        catch (final IOException ex)
+        {
+            Log.e(LOG_TAG, "Failed to read resource " + resourceId + ": " + ex);
+        }
+        return null;
+    }
+
+    ByteBuffer loadRogerBeep(Resources resources)
+    {
+        final int sampleRate = m_audioRecord.getSampleRate();
+        int resourceId = -1;
+        for (SampleRateInfo sri : s_sampleRates)
+        {
+            if (sri.sampleRate == sampleRate)
+            {
+                resourceId = sri.rogerBeepResourceId;
+                break;
+            }
+        }
+
+        if (resourceId == -1)
+            return null;
+        else
+            return loadWavResource(resources, resourceId);
+    }
+
+    void setRogerBeepOn(Resources resources)
+    {
+        if (m_rogerBeep == null)
+            m_rogerBeep = loadRogerBeep(resources);
+    }
+
+    void setRogerBeepOff()
+    {
+        m_rogerBeep = null;
+    }
+
     void shutdown()
     {
-        Log.d( LOG_TAG, "shutdown" );
+        Log.d(LOG_TAG, "shutdown");
         m_lock.lock();
         try
         {
@@ -288,9 +409,9 @@ public class AudioRecorder implements Runnable
 
     static AudioRecorder create(SessionManager sessionManager)
     {
-        final int [] rates = { 11025, 16000, 22050, 44100 };
-        for (int sampleRate : rates)
+        for (SampleRateInfo sampleRateInfo : s_sampleRates)
         {
+            final int sampleRate = sampleRateInfo.sampleRate;
             final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
             final int minBufferSize = AudioRecord.getMinBufferSize(
                     sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT);
@@ -298,7 +419,7 @@ public class AudioRecorder implements Runnable
             if ((minBufferSize != AudioRecord.ERROR) &&
                 (minBufferSize != AudioRecord.ERROR_BAD_VALUE))
             {
-                /* Let's read not more than 1/5 sec, to reduce the latency. */
+                /* Let's read not more than 1/5 sec to reduce latency. */
                 final int frameSize = (sampleRate * (Short.SIZE / Byte.SIZE) / 5) & (Integer.MAX_VALUE - 1);
                 int bufferSize = (frameSize * 4);
                 if (bufferSize < minBufferSize)

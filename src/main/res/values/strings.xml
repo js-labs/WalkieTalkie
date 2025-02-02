@@ -3,14 +3,10 @@
     <string name="_colon"> : </string>
     <string name="about">About</string>
     <string name="about_text">
-        This program transmits sound recorded from microphone to some other devices
-        running the same program, so works like Walkie Talkie radio.\n\n
-        Devices find each other by NSD (aka Bonjour).\n\n
-        Program released under GPL license, source code available at
-        <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
-        Application use JS-Collider (scalable Java NIO framework), see
-        <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a>
-        for further details.
+    This program transmits sound recorded from microphone to some other devices running the same program, so works like Walkie Talkie radio.\n\n
+    Devices find each other by NSD (aka Bonjour).\n\n
+    Program released under AGPL license, source code available at <a href="https://github.com/js-labs/WalkieTalkie">https://github.com/js-labs/WalkieTalkie</a>\n\n
+    Application uses JS-Collider (scalable Java NIO framework) to transfer data over the network, see <a href="https://github.com/js-labs/js-collider">https://github.com/js-labs/js-collider</a> for further details.
     </string>
     <string name="app_name">WiFi Walkie Talkie</string>
     <string name="back_button_exits">Back button exits</string>
@@ -23,6 +19,7 @@
     <string name="never_ask_again">Never ask again</string>
     <string name="nsd_not_found">NSD service not found</string>
     <string name="push_to_talk">\nPUSH-TO-TALK\n</string>
+    <string name="roger_beep">Roger beep</string>
     <string name="running">Running</string>
     <string name="set">Set</string>
     <string name="settings">Settings</string>

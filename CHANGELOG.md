@@ -1,6 +1,9 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## 1.13
+- add roger beep
+
 ## 1.12
 - transmit to the particular station (press and hold the station in the list)
 - back button exits setting

@@ -278,6 +278,12 @@ public class ChannelSession implements Session.Listener
             m_session.sendData(audioFrame);
     }
 
+    void sendAudioFrame(ByteBuffer audioFrame, boolean ptt)
+    {
+        if (ptt || m_sendAudio)
+            m_session.sendData(audioFrame);
+    }
+
     void setSendAudio(boolean sendAudioFrame)
     {
         m_sendAudio = sendAudioFrame;

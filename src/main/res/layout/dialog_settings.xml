@@ -2,47 +2,47 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:orientation="vertical"
               android:layout_width="fill_parent"
-              android:layout_height="match_parent" android:padding="5px">
-
+              android:layout_height="match_parent"
+              android:padding="8dp">
     <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceMedium"
             android:text="@string/station_name"
-            android:id="@+id/textView" android:padding="5dp"/>
+            android:id="@+id/textView"
+            android:padding="8dp"/>
     <EditText
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:id="@+id/editTextStationName" android:padding="5dp"/>
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:id="@+id/editTextStationName"
+            android:padding="8dp"/>
     <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="?android:attr/textAppearanceMedium"
             android:text="@string/volume"
-            android:id="@+id/textView2" android:padding="5dp"/>
+            android:id="@+id/textView2"
+            android:padding="8dp"/>
     <SeekBar
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:id="@+id/seekBarVolume"/>
+            android:id="@+id/seekBarVolume"
+            android:padding="8dp"/>
     <CheckBox
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="@string/use_volume_buttons_to_talk"
             android:id="@+id/checkBoxUseVolumeButtonsToTalk"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"/>
+            style="@style/SettingsDialogCheckBox"/>
     <CheckBox
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="@string/check_wifi_status_on_start"
             android:id="@+id/checkBoxCheckWiFiStatusOnStart"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"/>
+            style="@style/SettingsDialogCheckBox"/>
     <CheckBox
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:text="@string/roger_beep"
+            android:id="@+id/checkBoxRogerBeep"
+            style="@style/SettingsDialogCheckBox"/>
+    <CheckBox
             android:text="@string/back_button_exits"
             android:id="@+id/checkBoxBackButtonExits"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"/>
+            style="@style/SettingsDialogCheckBox"/>
 </LinearLayout>
