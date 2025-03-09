@@ -1,20 +1,11 @@
-buildscript {
-
-    repositories {
-        google()
-        jcenter()
-    }
-
-    dependencies {
-        classpath 'com.android.tools.build:gradle:4.0.0'
-    }
+plugins {
+    id 'com.android.application' version '7.4.1'
 }
 
-apply plugin: 'com.android.application'
-
 android {
+    namespace "org.jsl.wfwt"
     compileSdkVersion 16
-    buildToolsVersion "29.0.2"
+    buildToolsVersion "30.0.3"
 
     lintOptions {
         checkReleaseBuilds false
@@ -25,11 +16,6 @@ android {
         minSdkVersion 16
         targetSdkVersion 16
     }
-}
-
-repositories {
-    google()
-    jcenter()
 }
 
 dependencies {
